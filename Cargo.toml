@@ -1,0 +1,15 @@
+[package]
+name = "init-compression-benchmark"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "^1.0.95"
+clap = { version = "^4.5.23", features = ["derive"] }
+
+[dependencies.nix]
+version = "^0.29"
+features = ["fs", "process", "user"]
+
+[dev-dependencies]
+pretty_assertions = "^1.4.1"

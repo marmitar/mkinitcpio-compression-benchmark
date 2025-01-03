@@ -1,9 +1,9 @@
 //! Handles UNIX user spec in the format `user:group`.
 
-use core::str::FromStr;
 use core::fmt::{self, Display, Formatter, Write};
+use core::str::FromStr;
 
-use anyhow::{bail, Error, Result};
+use anyhow::{Error, Result, bail};
 use nix::unistd::{Group, Uid, User};
 
 /// Represents a UNIX user spec from format `user:group`.
@@ -32,7 +32,10 @@ impl UserSpec {
         let Some(group) = Group::from_gid(owner.gid)? else {
             bail!("could not find login group of user '{}'", owner.name);
         };
-        Ok(Self { owner: Some(owner), group: Some(group) })
+        Ok(Self {
+            owner: Some(owner),
+            group: Some(group),
+        })
     }
 
     /// Parse a UNIX user spec.
@@ -138,14 +141,10 @@ fn get_item<T, U: From<u32>>(
     let trimmed = spec.trim();
     if trimmed.starts_with('+') {
         // +NUM defaults to userid, but fallbacks to username
-        parse_id(trimmed).or_else(|original_error| {
-            parse_name(spec).ok().ok_or(original_error)
-        })
+        parse_id(trimmed).or_else(|original_error| parse_name(spec).ok().ok_or(original_error))
     } else {
         // otherwise defaults to username, but fallbacks to userid
-        parse_name(spec).or_else(|original_error| {
-            parse_id(trimmed).ok().ok_or(original_error)
-        })
+        parse_name(spec).or_else(|original_error| parse_id(trimmed).ok().ok_or(original_error))
     }
 }
 
@@ -287,7 +286,6 @@ mod test {
 
     #[test]
     fn doesnt_ignore_whitespace_for_username() {
-
         let error = UserSpec::from_spec(" root : log ").unwrap_err();
         assert_eq!(error.to_string(), "could not find user with name: ' root '");
 

@@ -1,0 +1,9 @@
+# from .editorconfig
+newline_style = "Unix"
+hard_tabs = false
+max_width = 120
+
+# others
+style_edition = "2024"
+fn_call_width = 100
+attr_fn_like_width = 112

@@ -1,5 +1,5 @@
-use core::convert::Infallible;
 use alloc::ffi::CString;
+use core::convert::Infallible;
 
 use anyhow::Result;
 use nix::unistd::Uid;
@@ -16,7 +16,7 @@ const SHARED_ENVS: &[&str] = &[
 pub fn run0(program: impl IntoIterator<Item = impl Into<Vec<u8>>>) -> Result<Infallible> {
     let binary = c"/usr/bin/run0";
 
-    let mut args =  vec![binary.to_owned()];
+    let mut args = vec![binary.to_owned()];
     for &env in SHARED_ENVS {
         if std::env::var_os(env).is_some() {
             let arg = format!("--setenv={env}");

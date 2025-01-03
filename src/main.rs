@@ -56,12 +56,12 @@
 
 extern crate alloc;
 
-mod user_spec;
 mod sudo;
+mod user_spec;
 
 use std::path::PathBuf;
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use clap::Parser;
 use sudo::{is_root, run0};
 use user_spec::UserSpec;

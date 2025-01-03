@@ -91,7 +91,7 @@ pub fn main() -> Result<()> {
 
         sudo::run0([
             program.into_os_string().into_encoded_bytes(),
-            format!("--chown={}", target_user.to_spec()).into(),
+            format!("--chown={:+}", target_user.to_numeric_spec()).into(),
             ["--outdir=".into(), outdir.into_os_string().into_encoded_bytes()].concat(),
         ])?;
         unreachable!("exec run0 should either replace the process or fail, ending current execution here");

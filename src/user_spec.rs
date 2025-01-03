@@ -1,6 +1,6 @@
 //! Handles UNIX user spec in the format `user:group`.
 
-use core::fmt::{self, Display, Formatter, Write};
+use core::fmt::{self, Write};
 use core::str::FromStr;
 
 use anyhow::{Error, Result, bail};
@@ -82,25 +82,49 @@ impl UserSpec {
     /// # use init_compression_benchmark::UserSpec;
     /// let spec = UserSpec::from_spec("root:")?;
     /// assert_eq!(spec.to_string(), "root:root");
-    /// assert_eq!(spec.to_spec(), "+0:+0");
-    /// assert_eq!(UserSpec::from_spec(spec.to_spec())?, spec);
+    /// assert_eq!(format!("{:+}", spec.to_numeric_spec()), "+0:+0");
+    /// assert_eq!(UserSpec::from_spec(spec.to_spec().to_string())?, spec);
     /// # anyhow::Ok(())
     /// ```
+    #[inline]
     #[must_use]
-    pub fn to_spec(&self) -> String {
-        match (&self.owner, &self.group) {
-            (Some(owner), Some(group)) => format!("{:+}:{:+}", owner.uid, group.gid),
-            (Some(owner), None) => format!("{:+}", owner.uid),
-            (None, Some(group)) => format!(":{:+}", group.gid),
-            (None, None) => String::new(),
+    pub const fn to_numeric_spec(&self) -> impl Copy + fmt::Display + '_ {
+        UserSpecFormatter {
+            spec: self,
+            numeric: true,
+        }
+    }
+
+    /// Formats [`UserSpec`] as `username:groupname`.
+    ///
+    /// The string returned will be parsed correctly with [`UserSpec::from_spec`], as long the system keeps user and
+    /// groups information valid (i.e. the group was not deleted, or the user didn't change ID).
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use init_compression_benchmark::UserSpec;
+    /// let spec = UserSpec::from_spec("root:")?;
+    /// assert_eq!(spec.to_spec().to_string(), "root:root");
+    /// assert_eq!(spec.to_string(), "root:root");
+    /// assert_eq!(UserSpec::from_spec(spec.to_spec().to_string())?, spec);
+    /// # anyhow::Ok(())
+    /// ```
+    #[inline]
+    #[must_use]
+    pub const fn to_spec(&self) -> impl Copy + fmt::Display + '_ {
+        UserSpecFormatter {
+            spec: self,
+            numeric: false,
         }
     }
 }
 
 /// Formats [`UserSpec`] as `username:groupname`.
-impl Display for UserSpec {
+impl fmt::Display for UserSpec {
     /// Formats [`UserSpec`] as `username:groupname`.
-    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(user) = &self.owner {
             f.write_str(&user.name)?;
         }
@@ -112,13 +136,84 @@ impl Display for UserSpec {
     }
 }
 
+/// See [`UserSpec::from_spec`].
+impl FromStr for UserSpec {
+    type Err = Error;
+
+    /// See [`UserSpec::from_spec`].
+    #[inline]
+    fn from_str(spec: &str) -> Result<Self, Error> {
+        parse_spec(spec)
+    }
+}
+
+/// Handles customized formatting for [`UserSpec`].
+#[derive(Clone, Copy)]
+struct UserSpecFormatter<'a> {
+    /// [`UseSpec`] to be formatted.
+    spec: &'a UserSpec,
+    /// If output should be `+uid:+gid` or `username:groupname`.
+    numeric: bool,
+}
+
+impl fmt::Debug for UserSpecFormatter<'_> {
+    #[inline]
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Debug::fmt(self.spec, f)
+    }
+}
+
+impl fmt::Display for UserSpecFormatter<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if let Some(user) = &self.spec.owner {
+            if self.numeric {
+                fmt::Display::fmt(&user.uid, f)?;
+            } else {
+                fmt::Display::fmt(&user.name, f)?;
+            }
+        }
+        if let Some(group) = &self.spec.group {
+            f.write_char(':')?;
+
+            if self.numeric {
+                fmt::Display::fmt(&group.gid, f)?;
+            } else {
+                fmt::Display::fmt(&group.name, f)?;
+            }
+        }
+        Ok(())
+    }
+}
+
+/// See [`UserSpec::from_spec`].
+fn parse_spec(spec: &str) -> Result<UserSpec, Error> {
+    let (username, groupname, has_colon) = match spec.split_once(':') {
+        Some((user, group)) => (user, group, true),
+        None => (spec, "", false),
+    };
+
+    let user = get_item("user", username, User::from_name, User::from_uid)?;
+    let mut group = get_item("group", groupname, Group::from_name, Group::from_gid)?;
+
+    // A separator was given, but a group was not specified, so get the login group.
+    if group.is_none() && has_colon {
+        if let Some(user) = &user {
+            let Some(login_group) = Group::from_gid(user.gid)? else {
+                bail!("invalid login group {} for user '{}'", user.gid, user.name);
+            };
+            group = Some(login_group);
+        }
+    }
+
+    Ok(UserSpec { owner: user, group })
+}
+
 /// Parse either a user or a group from `user:group` spec.
 ///
 /// This handles both name and ID search. If the spec starts with `+`, then
 /// ID search is performed first, and assumed to be the default, otherwise
 /// name search is performed first. If the first search fails, the other
 /// method is tried.
-#[inline]
 fn get_item<T, U: From<u32>>(
     item_desc: &str,
     spec: &str,
@@ -146,40 +241,12 @@ fn get_item<T, U: From<u32>>(
     };
 
     let trimmed = spec.trim();
-    if trimmed.starts_with('+') {
+    if trimmed.starts_with('+') || trimmed.starts_with('-') {
         // +NUM defaults to userid, but fallbacks to username
         parse_id(trimmed).or_else(|original_error| parse_name(spec).ok().ok_or(original_error))
     } else {
         // otherwise defaults to username, but fallbacks to userid
         parse_name(spec).or_else(|original_error| parse_id(trimmed).ok().ok_or(original_error))
-    }
-}
-
-/// See [`UserSpec::from_spec`].
-impl FromStr for UserSpec {
-    type Err = Error;
-
-    /// See [`UserSpec::from_spec`].
-    fn from_str(spec: &str) -> Result<Self, Error> {
-        let (username, groupname, has_colon) = match spec.split_once(':') {
-            Some((user, group)) => (user, group, true),
-            None => (spec, "", false),
-        };
-
-        let user = get_item("user", username, User::from_name, User::from_uid)?;
-        let mut group = get_item("group", groupname, Group::from_name, Group::from_gid)?;
-
-        // A separator was given, but a group was not specified, so get the login group.
-        if group.is_none() && has_colon {
-            if let Some(user) = &user {
-                let Some(login_group) = Group::from_gid(user.gid)? else {
-                    bail!("invalid login group {} for user '{}'", user.gid, user.name);
-                };
-                group = Some(login_group);
-            }
-        }
-
-        Ok(Self { owner: user, group })
     }
 }
 
@@ -312,8 +379,8 @@ mod test {
         let owner = spec.owner.as_ref().unwrap();
         let group = spec.group.as_ref().unwrap();
 
-        assert_eq!(spec.to_spec(), format!("+{}:+{}", owner.uid, group.gid));
-        assert_eq!(UserSpec::from_spec(spec.to_spec()).unwrap(), spec);
+        assert_eq!(format!("{:+}", spec.to_numeric_spec()), format!("+{}:+{}", owner.uid, group.gid));
+        assert_eq!(UserSpec::from_spec(spec.to_numeric_spec().to_string()).unwrap(), spec);
 
         assert_eq!(spec.to_string(), format!("{}:{}", owner.name, group.name));
         assert_eq!(UserSpec::from_spec(spec.to_string()).unwrap(), spec);

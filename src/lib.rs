@@ -1,3 +1,5 @@
+//! Accompaning library for `mkinitcpio-compression-benchmark`.
+
 // Additional Errors
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::all)]
@@ -26,6 +28,7 @@
 #![warn(clippy::map_with_unused_argument_over_ranges)]
 #![warn(clippy::mem_forget)]
 #![warn(clippy::missing_assert_message)]
+#![warn(clippy::missing_docs_in_private_items)]
 #![warn(clippy::mixed_read_write_in_expression)]
 #![warn(clippy::multiple_inherent_impl)]
 #![warn(clippy::multiple_unsafe_ops_per_block)]

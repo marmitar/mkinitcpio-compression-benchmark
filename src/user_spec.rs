@@ -3,7 +3,7 @@
 use core::fmt::{self, Write};
 use core::str::FromStr;
 
-use anyhow::{Error, Result, bail};
+use anyhow::{Result, bail};
 use nix::unistd::{Group, Uid, User};
 
 /// Represents a UNIX user spec from format `user:group`.
@@ -21,7 +21,7 @@ impl UserSpec {
     /// # Example
     ///
     /// ```
-    /// # use init_compression_benchmark::UserSpec;
+    /// # use mkinitcpio_compression_benchmark::UserSpec;
     /// let spec = UserSpec::current_user()?;
     /// println!("{spec}"); // could be "root:root"
     /// # anyhow::Ok(())
@@ -79,7 +79,7 @@ impl UserSpec {
     /// # Example
     ///
     /// ```
-    /// # use init_compression_benchmark::UserSpec;
+    /// # use mkinitcpio_compression_benchmark::UserSpec;
     /// let spec = UserSpec::from_spec("root:")?;
     /// assert_eq!(spec.to_string(), "root:root");
     /// assert_eq!(format!("{:+}", spec.to_numeric_spec()), "+0:+0");
@@ -103,7 +103,7 @@ impl UserSpec {
     /// # Example
     ///
     /// ```
-    /// # use init_compression_benchmark::UserSpec;
+    /// # use mkinitcpio_compression_benchmark::UserSpec;
     /// let spec = UserSpec::from_spec("root:")?;
     /// assert_eq!(spec.to_spec().to_string(), "root:root");
     /// assert_eq!(spec.to_string(), "root:root");
@@ -138,11 +138,11 @@ impl fmt::Display for UserSpec {
 
 /// See [`UserSpec::from_spec`].
 impl FromStr for UserSpec {
-    type Err = Error;
+    type Err = anyhow::Error;
 
     /// See [`UserSpec::from_spec`].
     #[inline]
-    fn from_str(spec: &str) -> Result<Self, Error> {
+    fn from_str(spec: &str) -> anyhow::Result<Self> {
         parse_spec(spec)
     }
 }
@@ -186,7 +186,7 @@ impl fmt::Display for UserSpecFormatter<'_> {
 }
 
 /// See [`UserSpec::from_spec`].
-fn parse_spec(spec: &str) -> Result<UserSpec, Error> {
+fn parse_spec(spec: &str) -> Result<UserSpec> {
     let (username, groupname, has_colon) = match spec.split_once(':') {
         Some((user, group)) => (user, group, true),
         None => (spec, "", false),

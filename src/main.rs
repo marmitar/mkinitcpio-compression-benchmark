@@ -1,3 +1,5 @@
+//! `mkinitcpio-compression-benchmark` binary.
+
 // Additional Errors
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::all)]
@@ -26,6 +28,7 @@
 #![warn(clippy::map_with_unused_argument_over_ranges)]
 #![warn(clippy::mem_forget)]
 #![warn(clippy::missing_assert_message)]
+#![warn(clippy::missing_docs_in_private_items)]
 #![warn(clippy::mixed_read_write_in_expression)]
 #![warn(clippy::multiple_inherent_impl)]
 #![warn(clippy::multiple_unsafe_ops_per_block)]
@@ -58,21 +61,26 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use init_compression_benchmark::{UserSpec, sudo};
+use mkinitcpio_compression_benchmark::{UserSpec, sudo};
 
-/// TODO
+/// Run some benchmarks on mkinitcpio compression and decompression algorithms
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 struct Cli {
-    /// Name of the person ?
-    #[arg(short, long, default_value = "")]
-    chown: UserSpec,
-
-    /// Number of times to greet
-    #[arg(short, long, default_value = "output/")]
+    /// Directory to place output files.
+    #[arg(short, long, default_value = "./output")]
     outdir: PathBuf,
+
+    /// Set owner for output directories and files.
+    #[arg(short, long, value_name = "[OWNER][:[GROUP]]", required = false)]
+    chown: UserSpec,
 }
 
+/// Binary entrypoint.
+///
+/// # Errors
+///
+/// Any runtime error in the program.
 pub fn main() -> Result<()> {
     let cli = Cli::parse();
     let outdir = std::path::absolute(cli.outdir)?;

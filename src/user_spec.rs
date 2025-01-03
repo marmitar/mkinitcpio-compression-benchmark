@@ -10,9 +10,9 @@ use nix::unistd::{Group, Uid, User};
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct UserSpec {
     /// The user part of `user:group`.
-    owner: Option<User>,
+    pub owner: Option<User>,
     /// The group part of `user:group`.
-    group: Option<Group>,
+    pub group: Option<Group>,
 }
 
 impl UserSpec {

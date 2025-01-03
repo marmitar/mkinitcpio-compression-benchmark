@@ -54,10 +54,52 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 #![warn(clippy::unnecessary_self_imports)]
 
-use anyhow::Result;
+extern crate alloc;
 
 mod user_spec;
+mod sudo;
+
+use std::path::PathBuf;
+
+use anyhow::{bail, Result};
+use clap::Parser;
+use sudo::{is_root, run0};
+use user_spec::UserSpec;
+
+/// TODO
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Cli {
+    /// Name of the person ?
+    #[arg(short, long, default_value = "")]
+    chown: UserSpec,
+
+    /// Number of times to greet
+    #[arg(short, long, default_value = "output/")]
+    outdir: PathBuf,
+}
 
 pub fn main() -> Result<()> {
-    todo!()
+    let cli = Cli::parse();
+    let outdir = std::path::absolute(cli.outdir)?;
+    let chown = cli.chown;
+
+    if !is_root() {
+        let program = std::env::current_exe()?;
+
+        let current_user = UserSpec::current_user()?;
+        let target_user = UserSpec {
+            owner: chown.owner.or(current_user.owner),
+            group: chown.group.or(current_user.group),
+        };
+
+        run0([
+            program.into_os_string().into_encoded_bytes(),
+            format!("--chown={}", target_user.to_spec()).into(),
+            ["--outdir=".into(), outdir.into_os_string().into_encoded_bytes()].concat(),
+        ])?;
+        unreachable!("exec run0 should either replace the process or fail, ending current execution here");
+    }
+
+    todo!("{chown}");
 }

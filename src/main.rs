@@ -56,6 +56,8 @@
 
 use anyhow::Result;
 
+mod user_spec;
+
 pub fn main() -> Result<()> {
     todo!()
 }

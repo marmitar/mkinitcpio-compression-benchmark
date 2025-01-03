@@ -54,48 +54,9 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 #![warn(clippy::unnecessary_self_imports)]
 
-use std::path::PathBuf;
+extern crate alloc;
 
-use anyhow::Result;
-use clap::Parser;
-use init_compression_benchmark::{UserSpec, sudo};
+pub mod sudo;
+mod user_spec;
 
-/// TODO
-#[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
-struct Cli {
-    /// Name of the person ?
-    #[arg(short, long, default_value = "")]
-    chown: UserSpec,
-
-    /// Number of times to greet
-    #[arg(short, long, default_value = "output/")]
-    outdir: PathBuf,
-}
-
-pub fn main() -> Result<()> {
-    let cli = Cli::parse();
-    let outdir = std::path::absolute(cli.outdir)?;
-    let chown = cli.chown;
-
-    if !sudo::is_root() {
-        println!("program requires root to access mkinitcpio");
-
-        let program = std::env::current_exe()?;
-
-        let current_user = UserSpec::current_user()?;
-        let target_user = UserSpec {
-            owner: chown.owner.or(current_user.owner),
-            group: chown.group.or(current_user.group),
-        };
-
-        sudo::run0([
-            program.into_os_string().into_encoded_bytes(),
-            format!("--chown={}", target_user.to_spec()).into(),
-            ["--outdir=".into(), outdir.into_os_string().into_encoded_bytes()].concat(),
-        ])?;
-        unreachable!("exec run0 should either replace the process or fail, ending current execution here");
-    }
-
-    todo!("{chown}");
-}
+pub use user_spec::UserSpec;

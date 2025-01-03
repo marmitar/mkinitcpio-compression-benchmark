@@ -21,10 +21,15 @@ impl UserSpec {
     /// # Example
     ///
     /// ```
+    /// # use init_compression_benchmark::UserSpec;
     /// let spec = UserSpec::current_user()?;
     /// println!("{spec}"); // could be "root:root"
     /// # anyhow::Ok(())
     /// ```
+    ///
+    /// # Errors
+    ///
+    /// - Runtime UNIX errors (`EINTR`, `ENOMEM`, `ERANGE`, `EMFILE`, etc.)
     pub fn current_user() -> Result<Self> {
         let Some(owner) = User::from_uid(Uid::current())? else {
             bail!("could not find current user (uid = {})", Uid::current());
@@ -74,12 +79,14 @@ impl UserSpec {
     /// # Example
     ///
     /// ```
+    /// # use init_compression_benchmark::UserSpec;
     /// let spec = UserSpec::from_spec("root:")?;
-    /// assert_eq!(spec.to_string(), "root:root")
+    /// assert_eq!(spec.to_string(), "root:root");
     /// assert_eq!(spec.to_spec(), "+0:+0");
-    /// assert_eq!(UserSpec::from_spec(spec.to_spec()), spec);
+    /// assert_eq!(UserSpec::from_spec(spec.to_spec())?, spec);
     /// # anyhow::Ok(())
     /// ```
+    #[must_use]
     pub fn to_spec(&self) -> String {
         match (&self.owner, &self.group) {
             (Some(owner), Some(group)) => format!("{:+}:{:+}", owner.uid, group.gid),

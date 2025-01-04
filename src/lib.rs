@@ -59,9 +59,9 @@
 
 extern crate alloc;
 
-mod byte_string;
+pub mod bash;
 pub mod sudo;
 mod user_spec;
 
-pub use byte_string::ByteString;
+pub use bash::ByteString;
 pub use user_spec::UserSpec;

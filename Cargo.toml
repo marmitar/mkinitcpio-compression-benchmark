@@ -19,3 +19,4 @@ features = ["fs", "process", "user"]
 [dev-dependencies]
 pretty_assertions = { version = "^1.4.1", features = ["unstable"] }
 tempfile = "^3.15.0"
+map-macro = "^0.3.0"

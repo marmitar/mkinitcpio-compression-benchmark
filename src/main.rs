@@ -57,6 +57,7 @@
 #![warn(clippy::wildcard_enum_match_arm)]
 #![warn(clippy::unnecessary_self_imports)]
 
+use std::os::unix::ffi::OsStringExt;
 use std::path::PathBuf;
 
 use anyhow::Result;
@@ -98,9 +99,9 @@ pub fn main() -> Result<()> {
         };
 
         sudo::run0([
-            program.into_os_string().into_encoded_bytes(),
+            program.into_os_string().into_vec(),
             format!("--chown={:+}", target_user.to_numeric_spec()).into(),
-            ["--outdir=".into(), outdir.into_os_string().into_encoded_bytes()].concat(),
+            ["--outdir=".into(), outdir.into_os_string().into_vec()].concat(),
         ])?;
         unreachable!("exec run0 should either replace the process or fail, ending current execution here");
     }

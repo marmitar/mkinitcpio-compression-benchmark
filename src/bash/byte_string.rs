@@ -54,7 +54,7 @@ impl ByteString {
 
 impl PartialEq<str> for ByteString {
     fn eq(&self, other: &str) -> bool {
-        self.to_utf8() == Ok(other)
+        self.data.as_ref() == other.as_bytes()
     }
 }
 
@@ -70,7 +70,16 @@ where
 
 impl fmt::Debug for ByteString {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Debug::fmt(&self.to_string(), f)
+        fmt::Write::write_str(f, "b\"")?;
+        for chunk in self.utf8_chunks() {
+            fmt::Display::fmt(&chunk.valid().escape_debug(), f)?;
+            for byte in chunk.invalid() {
+                fmt::Write::write_str(f, "\\x")?;
+                fmt::UpperHex::fmt(&byte, f)?;
+            }
+        }
+        fmt::Write::write_char(f, '"')?;
+        Ok(())
     }
 }
 
@@ -193,5 +202,16 @@ mod test {
     fn from_str() {
         let text = "just normal text";
         assert_eq!(ByteString::from_str(text).unwrap(), text);
+    }
+
+    #[test]
+    fn debug_fmt() {
+        let bstr = ByteString::new(b"Hello \xF0\x90\x80World");
+        assert_eq!(format!("{:?}", bstr), "b\"Hello \\xF0\\x90\\x80World\"");
+        assert_eq!(format!("{:?}", bstr), stringify!(b"Hello \xF0\x90\x80World"));
+
+        let text = "another string";
+        let bstr = ByteString::new(text);
+        assert_eq!(format!("{bstr:?}"), format!("b{text:?}"));
     }
 }

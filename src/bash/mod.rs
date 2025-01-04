@@ -1,13 +1,14 @@
-/// Utilities for interaction with Bash.
+//! Utilities for interaction with Bash.
 
-use std::collections::HashMap;
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
 use std::process::{Command, Stdio};
+use std::sync::LazyLock;
 
 use anyhow::{Result, bail};
-use format_bytes::{format_bytes, write_bytes};
+use format_bytes::{DisplayBytes, format_bytes, write_bytes};
+use hashbrown::HashMap;
 
 mod byte_string;
 
@@ -25,27 +26,35 @@ pub type Environment = HashMap<ByteString, BashValue>;
 /// # Errors
 ///
 /// Could fail with runtime errors or path resolution errors.
-pub fn source(path: impl AsRef<Path>) -> Result<Environment> {
-    fn inner(input_path: &Path) -> Result<Environment> {
-        let path = input_path.canonicalize()?;
-        if !path.is_file() {
-            bail!("not a file: {} (resolved from {})", path.display(), input_path.display());
-        }
+pub fn source(input_path: &Path) -> Result<Environment> {
+    static EMPTY_ENV: LazyLock<Environment> = LazyLock::new(HashMap::new);
+    source_with(input_path, &EMPTY_ENV)
+}
 
-        let (Some(dir), Some(file)) = (path.parent(), path.file_name()) else {
-            bail!("invalid path: {} (resolved from {})", path.display(), input_path.display());
-        };
-
-        let command = format_bytes!(
-            b"source '{}' 1>&-
-            declare",
-            file.as_bytes(),
-        );
-
-        parse_vars(rbash_at(&command, dir)?)
+/// Source a bash file using an initial environment.
+///
+/// # Errors
+///
+/// See [`source`].
+pub fn source_with(input_path: &Path, initial_env: &Environment) -> Result<Environment> {
+    let path = input_path.canonicalize()?;
+    if !path.is_file() {
+        bail!("not a file: {} (resolved from {})", path.display(), input_path.display());
     }
 
-    inner(path.as_ref())
+    let (Some(dir), Some(file)) = (path.parent(), path.file_name()) else {
+        bail!("invalid path: {} (resolved from {})", path.display(), input_path.display());
+    };
+
+    let command = format_bytes!(
+        b"{}
+        source '{}' 1>&-
+        declare",
+        write_vars(initial_env),
+        file.as_bytes(),
+    );
+
+    parse_vars(rbash_at(&command, dir)?)
 }
 
 /// Execute `mapfile` to split a string into a bash array.
@@ -152,6 +161,31 @@ fn parse_vars(text: ByteString) -> Result<Environment> {
         .collect()
 }
 
+/// Display environment as `VARNAME=VALUE` lines.
+fn write_vars(env: &Environment) -> impl DisplayBytes + '_ {
+    use std::io::{self, Write};
+
+    struct EnvDisplay<'a> {
+        /// Source of environment variables.
+        env: &'a Environment,
+    }
+
+    impl DisplayBytes for EnvDisplay<'_> {
+        #[inline]
+        fn display_bytes(&self, output: &mut dyn Write) -> io::Result<()> {
+            for (key, value) in self.env {
+                output.write_all(key)?;
+                output.write_all(b"=")?;
+                output.write_all(&value.content)?;
+                output.write_all(b"\n")?;
+            }
+            Ok(())
+        }
+    }
+
+    EnvDisplay { env }
+}
+
 /// Either a Bash string or a Bash array.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
@@ -181,6 +215,10 @@ impl BashValue {
     /// Reads variable as a plain string.
     ///
     /// Arrays are concatenated into a single string with spaces.
+    ///
+    /// # Errors
+    ///
+    /// Runtime errors from bash evaluation.
     pub fn text(&self) -> Result<ByteString> {
         let command = format_bytes!(
             b"VAR={}
@@ -195,6 +233,10 @@ impl BashValue {
     /// Reads variable as an associative array.
     ///
     /// Doesn't work with numeric arrays.
+    ///
+    /// # Errors
+    ///
+    /// Runtime errors from bash evaluation.
     pub fn array(&self) -> Result<Environment> {
         let command = format_bytes!(
             b"declare -A ARR
@@ -215,7 +257,7 @@ impl BashValue {
 
 #[cfg(test)]
 mod test {
-    use map_macro::hash_map;
+    use map_macro::hashbrown::hash_map;
     use pretty_assertions::{assert_eq, assert_matches};
     use tempfile::NamedTempFile;
 
@@ -330,22 +372,58 @@ mod test {
             some_array[2]=done
         "};
 
-        let vars = source(tmp).unwrap();
-        let var = |name: &[u8]| vars.get(name).unwrap();
+        let vars = source(&tmp).unwrap();
+        let var = |name: &str| vars.get(name.as_bytes()).unwrap();
 
-        assert_eq!(var(b"simple"), &BashValue::new(b"'just basic text'"));
-        assert_eq!(var(b"simple").text().unwrap(), "just basic text");
+        assert_eq!(var("simple"), &BashValue::new(b"'just basic text'"));
+        assert_eq!(var("simple").text().unwrap(), "just basic text");
 
-        assert_eq!(var(b"var"), &BashValue::new(b"hi"));
-        assert_eq!(var(b"var").text().unwrap(), "hi");
+        assert_eq!(var("var"), &BashValue::new(b"hi"));
+        assert_eq!(var("var").text().unwrap(), "hi");
 
-        assert_eq!(var(b"some_array"), &BashValue::new(b"([0]=\"firstItem\" [1]=$'second\\nItem' [2]=\"done\")"));
-        assert_eq!(var(b"some_array").array().unwrap(), hash_map! {
+        assert_eq!(var("some_array"), &BashValue::new(b"([0]=\"firstItem\" [1]=$'second\\nItem' [2]=\"done\")"));
+        assert_eq!(var("some_array").array().unwrap(), hash_map! {
             ByteString::new("0") => BashValue::new(b"firstItem"),
             ByteString::new("1") => BashValue::new(b"$'second\\nItem'"),
             ByteString::new("2") => BashValue::new(b"done"),
         });
-        assert_eq!(var(b"some_array").text().unwrap(), "firstItem second\nItem done");
+        assert_eq!(var("some_array").text().unwrap(), "firstItem second\nItem done");
+    }
+
+    #[test]
+    fn source_variables_with_initial_env() {
+        let inital_env = hash_map! {
+            ByteString::new("simple") => BashValue::new(b"'initial simple text'"),
+            ByteString::new("var") => BashValue::new(b"'start var'"),
+            ByteString::new("some_array") => BashValue::new(b"([0]=started [1]='with some but')"),
+        };
+        let tmp = tmpfile! {"
+            simple=\"overwritten simple\"
+            var=$(echo modified \"$var\")
+
+            some_array+=(added 'new items')
+        "};
+
+        let vars = source_with(&tmp, &inital_env).unwrap();
+        let var = |name: &str| vars.get(name.as_bytes()).unwrap();
+
+        assert_eq!(var("simple"), &BashValue::new(b"'overwritten simple'"));
+        assert_eq!(var("simple").text().unwrap(), "overwritten simple");
+
+        assert_eq!(var("var"), &BashValue::new(b"'modified start var'"));
+        assert_eq!(var("var").text().unwrap(), "modified start var");
+
+        assert_eq!(var("some_array").array().unwrap(), hash_map! {
+            ByteString::new("0") => BashValue::new(b"started"),
+            ByteString::new("1") => BashValue::new(b"with\\ some\\ but"),
+            ByteString::new("2") => BashValue::new(b"added"),
+            ByteString::new("3") => BashValue::new(b"new\\ items"),
+        });
+        assert_eq!(var("some_array").text().unwrap(), "started with some but added new items");
+
+        let vars = source(&tmp).unwrap();
+        let var = |name: &str| vars.get(name.as_bytes()).unwrap();
+        assert_eq!(var("var").text().unwrap(), "modified ");
     }
 
     #[test]

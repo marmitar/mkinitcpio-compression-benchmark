@@ -19,7 +19,7 @@ use format_bytes::DisplayBytes;
 #[repr(transparent)]
 pub struct ByteString {
     /// Original binary data.
-    pub data: Box<[u8]>,
+    pub(super) data: Box<[u8]>,
 }
 
 impl ByteString {

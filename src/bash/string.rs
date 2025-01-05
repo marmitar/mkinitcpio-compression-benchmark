@@ -12,6 +12,7 @@ use anyhow::{Context, Result};
 use format_bytes::{DisplayBytes, format_bytes};
 use tempfile::NamedTempFile;
 
+use super::BashArray;
 use super::exec;
 
 fn escape(data: &[u8]) -> Result<Box<str>> {
@@ -47,7 +48,6 @@ impl BashString {
         Ok(Self { escaped, raw })
     }
 
-    #[inline]
     pub fn from_escaped(text: impl Into<Box<str>>) -> Result<Self> {
         Self::from_escaped_boxed(text.into())
     }
@@ -88,6 +88,43 @@ impl BashString {
     #[must_use]
     pub fn as_repr(&self) -> String {
         repr_byte_str(self.as_raw())
+    }
+
+    pub fn arrayize(&self) -> Result<BashArray> {
+        let command = format_bytes!(
+            b"set -f
+            INPUT={}
+            read -r -a OUTPUT <<< \"$INPUT\"",
+            self.escaped.as_bytes(),
+        );
+
+        let output = exec::rbash_with_output(&command)?;
+        BashArray::new(output)
+    }
+
+    /// Execute `mapfile` to split a string into a bash array.
+    ///
+    /// Splitting is done according to `delimiter`.
+    ///
+    /// For more details, see [bash(1)](https://man.archlinux.org/man/bash.1).
+    ///
+    /// # Errors
+    ///
+    /// Could fail with runtime errors.
+    pub fn mapfile(&self, delimiter: u8) -> Result<BashArray> {
+        let command = format_bytes!(
+            b"declare -a OUTPUT
+            OUTPUT=()
+            INPUT={}
+            mapfile -d '{}' -t OUTPUT 1>&- < <(
+                printf '%s' \"$INPUT\"
+            )",
+            self.escaped.as_bytes(),
+            [delimiter],
+        );
+
+        let output = exec::rbash_with_output(&command)?;
+        BashArray::new(output)
     }
 }
 

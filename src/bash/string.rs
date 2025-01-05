@@ -1,3 +1,5 @@
+//! Working with Bash strings.
+
 use alloc::borrow::Cow;
 use core::borrow::{Borrow, BorrowMut};
 use core::cmp::Ordering;
@@ -15,6 +17,12 @@ use tempfile::NamedTempFile;
 use super::BashArray;
 use super::exec;
 
+/// Apply Bash quoting rules for binary data.
+///
+/// - Doesn't escape simple strings.
+/// - Usually apply single quotes for spaces and parenthesis.
+/// - Uses `$'...'` evalutation for escaped characters (e.g. `\n`).
+/// - Doesn't work nicely with `\0`
 fn escape(data: &[u8]) -> Result<Box<str>> {
     let mut temp = NamedTempFile::new()?;
     temp.write_all(data)?;
@@ -26,6 +34,9 @@ fn escape(data: &[u8]) -> Result<Box<str>> {
     Ok(exec::rbash_with_output_at(&command, &dir)?.into())
 }
 
+/// Resolve a quoted Bash string.
+///
+/// Works mostly as the inverse of [`escape`].
 fn unescape(text: &str) -> Result<Box<[u8]>> {
     let command = format_bytes!(
         b"INPUT={}
@@ -36,60 +47,93 @@ fn unescape(text: &str) -> Result<Box<[u8]>> {
     Ok(exec::rbash(&command)?.into())
 }
 
+/// Represents a normal string value in Bash, quoted and unquoted.
 #[derive(Clone, Eq)]
 pub struct BashString {
+    /// Quoted version of the string.
     escaped: Box<str>,
+    /// Unquoted version of the string.
     raw: Box<[u8]>,
 }
 
 impl BashString {
+    /// See [`Self::from_escaped`].
     fn from_escaped_boxed(escaped: Box<str>) -> Result<Self> {
         let raw = unescape(&escaped).with_context(|| format!("while parsing possibly escaped text: {escaped:?}"))?;
         Ok(Self { escaped, raw })
     }
 
+    /// Resolves a Bash string from its quoted form.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Err`] for invalid or unquoted data, and for other runtime errors in Bash.
     pub fn from_escaped(text: impl Into<Box<str>>) -> Result<Self> {
         Self::from_escaped_boxed(text.into())
     }
 
+    /// See [`Self::from_raw`].
     fn from_raw_boxed(raw: Box<[u8]>) -> Result<Self> {
         let escaped = escape(&raw).with_context(|| format!("while escaping raw bytes: {}", repr_byte_str(&raw)))?;
         Ok(Self { escaped, raw })
     }
 
+    /// Resolves a Bash string from its unquoted form.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Err`] for runtime errors in Bash.
     #[inline]
     pub fn from_raw(bytes: impl Into<Box<[u8]>>) -> Result<Self> {
         Self::from_raw_boxed(bytes.into())
     }
 
+    /// Quoted form of the string.
     #[inline]
     #[must_use]
     pub const fn source(&self) -> &str {
         &self.escaped
     }
 
+    /// Unquoted form of the string.
     #[inline]
     #[must_use]
     pub const fn as_raw(&self) -> &[u8] {
         &self.raw
     }
 
+    /// Unquoted string as UTF-8.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Err`] if the raw string is not UTF-8 data.
     #[inline]
     pub const fn as_utf8(&self) -> Result<&str, Utf8Error> {
         core::str::from_utf8(self.as_raw())
     }
 
+    /// Unquoted string as UTF-8, replacing invalid characters.
     #[must_use]
     pub fn to_utf8_lossy(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.as_raw())
     }
 
+    /// Unquoted string as valid Rust source.
     #[inline]
     #[must_use]
     pub fn as_repr(&self) -> String {
         repr_byte_str(self.as_raw())
     }
 
+    /// Uses `read` to split the string into an array.
+    ///
+    /// Splitting is done at spaces, with `IFS=' '`.
+    ///
+    /// For more details, see [bash(1)](https://man.archlinux.org/man/bash.1).
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Err`] for runtime errors in Bash.
     pub fn arrayize(&self) -> Result<BashArray> {
         let command = format_bytes!(
             b"set -f
@@ -102,7 +146,7 @@ impl BashString {
         BashArray::new(output)
     }
 
-    /// Execute `mapfile` to split a string into a bash array.
+    /// Uses `mapfile` to split the string into an array.
     ///
     /// Splitting is done according to `delimiter`.
     ///
@@ -110,7 +154,7 @@ impl BashString {
     ///
     /// # Errors
     ///
-    /// Could fail with runtime errors.
+    /// Returns [`Err`] for runtime errors in Bash.
     pub fn mapfile(&self, delimiter: u8) -> Result<BashArray> {
         let command = format_bytes!(
             b"declare -a OUTPUT=()
@@ -127,6 +171,21 @@ impl BashString {
     }
 }
 
+/// Tries to convert as a quoted string, but uses unquoted string as fallback.
+///
+/// See [`BashString::from_escaped`] and [`BashString::from_raw`].
+impl FromStr for BashString {
+    type Err = anyhow::Error;
+
+    /// Tries to convert as a quoted string, but uses unquoted string as fallback.
+    ///
+    /// See [`BashString::from_escaped`] and [`BashString::from_raw`].
+    fn from_str(text: &str) -> Result<Self> {
+        Self::from_escaped(text).or_else(|_| Self::from_raw(text.as_bytes()))
+    }
+}
+
+/// Represents a single byte with hexadecimal escape (`\x`).
 const fn repr_byte(byte: u8) -> [u8; 4] {
     const fn hex(num: u8) -> u8 {
         match num {
@@ -140,6 +199,7 @@ const fn repr_byte(byte: u8) -> [u8; 4] {
     [b'\\', b'x', hex(byte / 16), hex(byte % 16)]
 }
 
+/// Represents a byte array as Rust source, escaping non UTF-8 characters with hexadecimal (`\x`).
 fn repr_byte_str(bytes: &[u8]) -> String {
     let content = bytes.utf8_chunks().flat_map(|chunk| {
         let valid = chunk.valid().escape_debug();
@@ -264,16 +324,51 @@ impl DerefMut for BashString {
     }
 }
 
-impl FromStr for BashString {
-    type Err = anyhow::Error;
+#[cfg(test)]
+mod conversion {
+    use pretty_assertions::{assert_eq, assert_matches};
 
-    fn from_str(text: &str) -> Result<Self> {
-        Self::from_escaped(text).or_else(|_| Self::from_raw(text.as_bytes()))
+    use super::*;
+
+    #[test]
+    fn escaping() {
+        let raw = b"just some text";
+        let escaped = escape(raw).unwrap();
+        assert_eq!(&*escaped, "'just some text'");
+        assert_eq!(&*unescape(&escaped).unwrap(), raw);
+
+        let raw = b"binary\xFF\xFFdata";
+        let escaped = escape(raw).unwrap();
+        assert_eq!(&*escaped, "$'binary\\377\\377data'");
+        assert_eq!(&*unescape(&escaped).unwrap(), raw);
+    }
+
+    #[test]
+    fn non_escaped_text() {
+        assert_eq!(&*unescape("word").unwrap(), b"word");
+
+        let err = unescape("multiple words").unwrap_err();
+        assert_matches!(err.to_string(), s if s.contains("words: command not found"));
+    }
+
+    #[test]
+    fn rust_representation() {
+        assert_eq!(repr_byte_str(b"text with \0 binary \xFF data"), stringify!(b"text with \0 binary \xFF data"));
+    }
+
+    #[test]
+    fn arrayize() {
+        let string = BashString::from_raw(*b"string 'with quotes' and\0 null byte").unwrap();
+        assert_eq!(string.source(), "'string '\\''with quotes'\\'' and null byte'");
+
+        assert_eq!(string.arrayize().unwrap(), ["string", "'with", "quotes'", "and", "null", "byte"]);
+        assert_eq!(string.mapfile(b' ').unwrap(), ["string", "'with", "quotes'", "and", "null", "byte"]);
+        assert_eq!(string.mapfile(b'\0').unwrap(), ["string 'with quotes' and null byte"]);
     }
 }
 
 #[cfg(test)]
-mod test {
+mod basic_impl {
     use pretty_assertions::{assert_eq, assert_ne};
 
     use super::*;
@@ -304,13 +399,15 @@ mod test {
     }
 
     #[test]
-    fn debug_fmt() {
+    fn diplay_debug_fmt() {
         let string = BashString::from_raw(b"Hello \xF0\x90\x80World".as_slice()).unwrap();
         assert_eq!(string.as_repr(), stringify!(b"Hello \xF0\x90\x80World"));
         assert_eq!(format!("{:?}", string), "$'Hello \\360\\220\\200World'");
+        assert_eq!(string.to_string(), "Hello �World");
 
         let text = "another string";
-        let string = BashString::from_str(text).unwrap();
+        let string = BashString::from_raw(text.as_bytes()).unwrap();
         assert_eq!(format!("{string:?}"), format!("'{text}'"));
+        assert_eq!(string.to_string(), text);
     }
 }

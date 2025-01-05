@@ -35,7 +35,7 @@ pub fn source(path: &Path) -> Result<HashMap<BashString, BashValue>> {
     parse_vars(output, |key| BashString::from_escaped(key), BashValue::from_source)
 }
 
-/// Parse a string of `VARNAME=VALUE` variables.
+/// Parse a string of `NAME=VALUE` variables.
 fn parse_vars<K, V, C: FromIterator<(K, V)>>(
     bytes: Vec<u8>,
     parse_key: fn(&str) -> Result<K>,
@@ -53,14 +53,22 @@ fn parse_vars<K, V, C: FromIterator<(K, V)>>(
         .collect()
 }
 
+/// Represents a value from a variable in Bash.
 #[derive(Clone, PartialEq, Eq, Hash)]
 #[expect(clippy::exhaustive_enums, reason = "only two kinds of variable in Bash")]
 pub enum BashValue {
+    /// Simple string variable.
     String(BashString),
+    /// Indexed array variable.
     Array(BashArray),
 }
 
 impl BashValue {
+    /// Parses either a string or an array value from a Bash variable.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Err`] for invalid or unquoted data, and for other runtime errors in Bash.
     pub fn from_source(text: &str) -> Result<Self> {
         if array::is_array_source(text.trim()) {
             Ok(Self::Array(BashArray::new(text)?))
@@ -69,6 +77,7 @@ impl BashValue {
         }
     }
 
+    /// Quoted form of the string or array.
     #[inline]
     #[must_use]
     pub const fn source(&self) -> &str {
@@ -78,6 +87,7 @@ impl BashValue {
         }
     }
 
+    /// If this is a string value, access it.
     #[inline]
     #[must_use]
     pub const fn string(&self) -> Option<&BashString> {
@@ -87,6 +97,8 @@ impl BashValue {
         }
     }
 
+
+    /// If this is an array value, access it.
     #[inline]
     #[must_use]
     pub const fn array(&self) -> Option<&BashArray> {

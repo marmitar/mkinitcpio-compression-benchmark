@@ -251,7 +251,7 @@ fn get_item<T, U: From<u32>>(
 }
 
 #[cfg(test)]
-mod test {
+mod parsing {
     use nix::unistd::ROOT;
     use pretty_assertions::assert_eq;
 
@@ -372,9 +372,16 @@ mod test {
         let error = UserSpec::from_spec(" root").unwrap_err();
         assert_eq!(error.to_string(), "could not find user with name: ' root'");
     }
+}
+
+#[cfg(test)]
+mod display {
+    use pretty_assertions::assert_eq;
+
+    use super::*;
 
     #[test]
-    fn to_spec_returns_valid_string() {
+    fn to_spec_returns_parseable_string() {
         let spec = UserSpec::current_user().unwrap();
         let owner = spec.owner.as_ref().unwrap();
         let group = spec.group.as_ref().unwrap();

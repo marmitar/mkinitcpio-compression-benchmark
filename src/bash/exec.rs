@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
 use anyhow::{Result, bail};
-use format_bytes::write_bytes;
+use format_bytes::{format_bytes, write_bytes};
 
 /// Run a restricted Bash shell at `/`.
 ///
@@ -55,6 +55,30 @@ pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
 
     std::io::stderr().write_all(&output.stderr)?;
     Ok(output.stdout)
+}
+
+pub fn rbash_with_output(commands: impl AsRef<[u8]>) -> Result<String> {
+    rbash_with_output_at(commands.as_ref(), Path::new("/"))
+}
+
+pub fn rbash_with_output_at(commands: &[u8], dir: &Path) -> Result<String> {
+    let commands_with_output = format_bytes!(
+        b"{}
+        declare | grep -E '^OUTPUT='",
+        commands
+    );
+
+    let environment = String::from_utf8(rbash_at(&commands_with_output, dir)?)?;
+    let mut values = environment.lines().filter_map(|line| line.strip_prefix("OUTPUT="));
+
+    let Some(result) = values.next() else {
+        bail!("missing OUTPUT variable");
+    };
+    if values.next().is_some() {
+        bail!("multiple OUTPUT variables");
+    }
+
+    Ok(result.into())
 }
 
 /// Resolve file then split into directory and filename.

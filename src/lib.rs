@@ -63,5 +63,4 @@ pub mod bash;
 pub mod sudo;
 mod user_spec;
 
-pub use bash::ByteString;
 pub use user_spec::UserSpec;

@@ -228,12 +228,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "78b3ae25bc7c8c38cec158d1f2757ee79e9b3740fbc7ccf0e59e4b08d793fa89"
 
 [[package]]
-name = "map-macro"
-version = "0.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fb950a42259642e5a3483115aca87eebed2a64886993463af9c9739c205b8d3a"
-
-[[package]]
 name = "mkinitcpio-compression-benchmark"
 version = "0.1.0"
 dependencies = [
@@ -241,7 +235,6 @@ dependencies = [
  "clap",
  "format-bytes",
  "hashbrown",
- "map-macro",
  "nix",
  "pretty_assertions",
  "tempfile",

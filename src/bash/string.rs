@@ -64,7 +64,7 @@ impl BashString {
 
     #[inline]
     #[must_use]
-    pub const fn as_escaped(&self) -> &str {
+    pub const fn source(&self) -> &str {
         &self.escaped
     }
 
@@ -113,8 +113,7 @@ impl BashString {
     /// Could fail with runtime errors.
     pub fn mapfile(&self, delimiter: u8) -> Result<BashArray> {
         let command = format_bytes!(
-            b"declare -a OUTPUT
-            OUTPUT=()
+            b"declare -a OUTPUT=()
             INPUT={}
             mapfile -d '{}' -t OUTPUT 1>&- < <(
                 printf '%s' \"$INPUT\"
@@ -158,7 +157,7 @@ fn repr_byte_str(bytes: &[u8]) -> String {
 impl fmt::Debug for BashString {
     #[inline]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(self.as_escaped())
+        f.write_str(self.source())
     }
 }
 
@@ -181,14 +180,14 @@ impl DisplayBytes for BashString {
     }
 }
 
-impl<T: AsRef<[u8]>> PartialEq<T> for BashString {
+impl<T: AsRef<[u8]> + ?Sized> PartialEq<T> for BashString {
     #[inline]
     fn eq(&self, other: &T) -> bool {
         self.as_raw().eq(other.as_ref())
     }
 }
 
-impl<T: AsRef<[u8]>> PartialOrd<T> for BashString {
+impl<T: AsRef<[u8]> + ?Sized> PartialOrd<T> for BashString {
     #[inline]
     fn partial_cmp(&self, other: &T) -> Option<Ordering> {
         self.as_raw().partial_cmp(other.as_ref())

@@ -23,7 +23,7 @@ pub use string::BashString;
 /// # Errors
 ///
 /// Could fail with runtime errors or path resolution errors.
-pub fn source(path: &Path) -> Result<HashMap<BashString, BashVariable>> {
+pub fn source(path: &Path) -> Result<HashMap<BashString, BashValue>> {
     let (dir, file) = exec::resolve_file(path)?;
     let command = format_bytes!(
         b"source '{}' 1>&-
@@ -32,11 +32,15 @@ pub fn source(path: &Path) -> Result<HashMap<BashString, BashVariable>> {
     );
 
     let output = exec::rbash_at(&command, &dir)?;
-    parse_vars(output, BashVariable::from_source)
+    parse_vars(output, |key| BashString::from_escaped(key), BashValue::from_source)
 }
 
 /// Parse a string of `VARNAME=VALUE` variables.
-fn parse_vars<T, C: FromIterator<(BashString, T)>>(bytes: Vec<u8>, parse: fn(&str) -> Result<T>) -> Result<C> {
+fn parse_vars<K, V, C: FromIterator<(K, V)>>(
+    bytes: Vec<u8>,
+    parse_key: fn(&str) -> Result<K>,
+    parse_value: fn(&str) -> Result<V>,
+) -> Result<C> {
     String::from_utf8(bytes)?
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -44,19 +48,19 @@ fn parse_vars<T, C: FromIterator<(BashString, T)>>(bytes: Vec<u8>, parse: fn(&st
             let Some((name, value)) = line.split_once('=') else {
                 bail!("missing variable assignment: {line}");
             };
-            Ok((BashString::from_escaped(name)?, parse(value)?))
+            Ok((parse_key(name)?, parse_value(value)?))
         })
         .collect()
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 #[expect(clippy::exhaustive_enums, reason = "only two kinds of variable in Bash")]
-pub enum BashVariable {
+pub enum BashValue {
     String(BashString),
     Array(BashArray),
 }
 
-impl BashVariable {
+impl BashValue {
     pub fn from_source(text: &str) -> Result<Self> {
         if array::is_array_source(text.trim()) {
             Ok(Self::Array(BashArray::new(text)?))
@@ -65,132 +69,112 @@ impl BashVariable {
         }
     }
 
-    pub fn to_bash_string(&self) -> Result<BashString> {
+    #[inline]
+    #[must_use]
+    pub const fn source(&self) -> &str {
         match self {
-            Self::String(string) => Ok(string.clone()),
-            Self::Array(array) => array.to_bash_string(),
+            Self::String(string) => string.source(),
+            Self::Array(array) => array.source(),
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn string(&self) -> Option<&BashString> {
+        match self {
+            Self::String(string) => Some(string),
+            Self::Array(_) => None,
+        }
+    }
+
+    #[inline]
+    #[must_use]
+    pub const fn array(&self) -> Option<&BashArray> {
+        match self {
+            Self::String(_) => None,
+            Self::Array(array) => Some(array),
         }
     }
 }
 
-// #[cfg(test)]
-// mod test {
-//     use std::io::Write;
+#[cfg(test)]
+mod test {
+    use std::io::Write;
 
-//     use map_macro::hashbrown::hash_map;
-//     use pretty_assertions::assert_eq;
-//     use tempfile::NamedTempFile;
+    use pretty_assertions::assert_eq;
+    use tempfile::NamedTempFile;
 
-//     use super::*;
+    use super::*;
 
-//     #[test]
-//     fn text_variable_is_unescaped() {
-//         let var = BashValue::new(b"justASingleWord");
-//         assert_eq!(var.is_array(), false);
-//         assert_eq!(var.text().unwrap(), "justASingleWord");
-//         assert_eq!(var.array().unwrap(), hash_map! {
-//             ByteString::new("0") => BashValue::new(b"justASingleWord"),
-//         });
+    #[test]
+    fn text_variable_is_unescaped() {
+        let var = BashValue::from_source("justASingleWord").unwrap();
+        assert_eq!(var.string().unwrap(), "justASingleWord");
+        assert_eq!(var.array(), None);
 
-//         let var = BashValue::new(b"'text with spaces'");
-//         assert_eq!(var.is_array(), false);
-//         assert_eq!(var.text().unwrap(), "text with spaces");
-//         assert_eq!(var.array().unwrap(), hash_map! {
-//             ByteString::new("0") => BashValue::new(b"text\\ with\\ spaces"),
-//         });
+        let var = BashValue::from_source("'text with spaces'").unwrap();
+        assert_eq!(var.string().unwrap(), "text with spaces");
+        assert_eq!(var.array(), None);
 
-//         let var = BashValue::new(b"$'contains\\tescapes\\n'");
-//         assert_eq!(var.is_array(), false);
-//         assert_eq!(var.text().unwrap(), "contains\tescapes\n");
-//         assert_eq!(var.array().unwrap(), hash_map! {
-//             ByteString::new("0") => BashValue::new(b"$'contains\\tescapes\\n'"),
-//         });
+        let var = BashValue::from_source("$'contains\\tescapes\\n'").unwrap();
+        assert_eq!(var.string().unwrap(), "contains\tescapes\n");
+        assert_eq!(var.array(), None);
 
-//         let var = BashValue::new(b"$'null character\\0 is ignored'");
-//         assert_eq!(var.is_array(), false);
-//         assert_eq!(var.text().unwrap(), "null character");
-//         assert_eq!(var.array().unwrap(), hash_map! {
-//             ByteString::new("0") => BashValue::new(b"null\\ character"),
-//         });
-//     }
+        let var = BashValue::from_source("$'null character\\0 is ignored'").unwrap();
+        assert_eq!(var.string().unwrap(), "null character");
+        assert_eq!(var.array(), None);
+    }
 
-//     #[test]
-//     fn associative_array_variable_is_unescaped() {
-//         let var = BashValue::new(b"()");
-//         assert_eq!(var.is_array(), true);
-//         assert_eq!(var.array().unwrap(), hash_map! {});
-//         assert_eq!(var.text().unwrap(), "");
+    #[test]
+    fn associative_array_variable_is_unescaped() {
+        let var = BashValue::from_source("()").unwrap();
+        assert_eq!(var.array().unwrap(), [""; 0].as_slice());
+        assert_eq!(var.string(), None);
 
-//         let var = BashValue::new(b"'()'");
-//         assert_eq!(var.is_array(), false);
-//         assert_eq!(var.array().unwrap(), hash_map! {
-//             ByteString::new("0") => BashValue::new(b"\\(\\)"),
-//         });
-//         assert_eq!(var.text().unwrap(), "()");
+        let var = BashValue::from_source("'()'").unwrap();
+        assert_eq!(var.array(), None);
+        assert_eq!(var.string().unwrap(), "()");
 
-//         let var = BashValue::new(b"([0]=first [1]='second item')");
-//         assert_eq!(var.is_array(), true);
-//         assert_eq!(var.array().unwrap(), hash_map! {
-//             ByteString::new("0") => BashValue::new(b"first"),
-//             ByteString::new("1") => BashValue::new(b"second\\ item"),
-//         });
-//         assert_eq!(var.text().unwrap(), "first second item");
+        let var = BashValue::from_source("([0]=first [1]='second item')").unwrap();
+        assert_eq!(var.array().unwrap().to_concatenated_string().unwrap(), "first second item");
+        assert_eq!(var.array().unwrap(), ["first", "second item"].as_slice());
+        assert_eq!(var.string(), None);
 
-//         let var = BashValue::new(b"(nonAssociative)");
-//         assert_eq!(var.is_array(), true);
-//         assert_eq!(var.array().unwrap(), hash_map! {
-//             ByteString::new("nonAssociative") => BashValue::new(b"''"),
-//         });
-//         assert_eq!(var.text().unwrap(), "nonAssociative");
-//     }
+        let var = BashValue::from_source("(nonAssociative)").unwrap();
+        assert_eq!(var.array().unwrap(), ["nonAssociative"].as_slice());
+        assert_eq!(var.string(), None);
+    }
 
-//     macro_rules! tmpfile {
-//         ($($arg:tt)*) => {{
-//             let mut tmp = NamedTempFile::new().expect("could not create temporary file");
-//             write!(tmp, $($arg)*).expect("could not write contents to temporary file");
-//             tmp.into_temp_path()
-//         }};
-//     }
+    macro_rules! tmpfile {
+        ($($arg:tt)*) => {{
+            let mut tmp = NamedTempFile::new().expect("could not create temporary file");
+            write!(tmp, $($arg)*).expect("could not write contents to temporary file");
+            tmp.into_temp_path()
+        }};
+    }
 
-//     #[test]
-//     fn source_variables() {
-//         let tmp = tmpfile! {"
-//             simple='just basic text'
-//             var=$(echo \"hi\")
+    #[test]
+    fn source_variables() {
+        let tmp = tmpfile! {"
+            simple='just basic text'
+            var=$(echo \"hi\")
 
-//             declare -a some_array
-//             some_array[0]=firstItem
-//             some_array[1]='second\nItem'
-//             some_array[2]=done
-//         "};
+            declare -a some_array
+            some_array[0]=firstItem
+            some_array[1]='second\nItem'
+            some_array[10]=done
+        "};
 
-//         let vars = source(&tmp).unwrap();
-//         let var = |name: &str| vars.get(name.as_bytes()).unwrap();
+        let vars = source(&tmp).unwrap();
+        let var = |name: &str| vars.get(name.as_bytes()).unwrap();
 
-//         assert_eq!(var("simple"), &BashValue::new(b"'just basic text'"));
-//         assert_eq!(var("simple").text().unwrap(), "just basic text");
+        assert_eq!(var("simple").source(), "'just basic text'");
+        assert_eq!(var("simple").string().unwrap(), "just basic text");
 
-//         assert_eq!(var("var"), &BashValue::new(b"hi"));
-//         assert_eq!(var("var").text().unwrap(), "hi");
+        assert_eq!(var("var").source(), "hi");
+        assert_eq!(var("var").string().unwrap(), "hi");
 
-//         assert_eq!(var("some_array"), &BashValue::new(b"([0]=\"firstItem\" [1]=$'second\\nItem' [2]=\"done\")"));
-//         assert_eq!(var("some_array").array().unwrap(), hash_map! {
-//             ByteString::new("0") => BashValue::new(b"firstItem"),
-//             ByteString::new("1") => BashValue::new(b"$'second\\nItem'"),
-//             ByteString::new("2") => BashValue::new(b"done"),
-//         });
-//         assert_eq!(var("some_array").text().unwrap(), "firstItem second\nItem done");
-//     }
-
-//     #[test]
-//     fn mapfile_string_to_array() {
-//         assert_eq!(mapfile(b' ', "\"-S string -T 'multi word text'\"").unwrap(), hash_map! {
-//             ByteString::new("0") => BashValue::new(b"-S"),
-//             ByteString::new("1") => BashValue::new(b"string"),
-//             ByteString::new("2") => BashValue::new(b"-T"),
-//             ByteString::new("3") => BashValue::new(b"\\'multi"),
-//             ByteString::new("4") => BashValue::new(b"word"),
-//             ByteString::new("5") => BashValue::new(b"text\\'"),
-//         });
-//     }
-// }
+        assert_eq!(var("some_array").source(), "([0]=\"firstItem\" [1]=$'second\\nItem' [10]=\"done\")");
+        assert_eq!(var("some_array").array().unwrap(), ["firstItem", "second\nItem", "done",].as_slice());
+    }
+}

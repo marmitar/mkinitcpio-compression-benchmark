@@ -12,6 +12,7 @@ anyhow = "^1.0.95"
 clap = { version = "^4.5.23", features = ["derive"] }
 format-bytes = "^0.3.0"
 hashbrown = "^0.15.2"
+tempfile = "^3.15.0"
 
 [dependencies.nix]
 version = "^0.29"
@@ -19,5 +20,3 @@ features = ["fs", "process", "user"]
 
 [dev-dependencies]
 pretty_assertions = { version = "^1.4.1", features = ["unstable"] }
-tempfile = "^3.15.0"
-map-macro = { version = "^0.3.0", default-features = false, features = ["hashbrown"] }

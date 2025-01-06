@@ -41,7 +41,7 @@ fn parse_array_content(text: &str) -> Result<Box<[(i32, BashString)]>> {
 }
 
 /// Represents an indexed arrayin Bash.
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone, Eq)]
 pub struct BashArray {
     /// Quoted version of the array.
     source: Box<str>,
@@ -108,6 +108,34 @@ impl BashArray {
         BashString::from_escaped(output)
     }
 
+    /// Recreate a quoted array from it's byte contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Err`] for runtime errors in Bash.
+    pub fn reescape(&self) -> Result<Self> {
+        let content = self
+            .entries()
+            .map(|(idx, string)| Ok((idx, string.reescape()?)))
+            .collect::<Result<Box<_>>>()?;
+
+        let mut source = String::with_capacity(self.source.len());
+        source.push('(');
+        for (pos, (idx, reescaped)) in content.iter().enumerate() {
+            if pos > 0 {
+                source.push(' ');
+            }
+            if pos.try_into() != Ok(*idx) {
+                write!(&mut source, "[{idx}]=")?;
+            }
+            source.push_str(reescaped.source());
+        }
+        source.push(')');
+
+        let source = source.into_boxed_str();
+        Ok(Self { source, content })
+    }
+
     /// Iterator of the `(index, string)` pairs.
     #[inline]
     #[must_use]
@@ -146,9 +174,10 @@ impl BashArray {
     }
 }
 
-impl<T: AsRef<[u8]> + ?Sized, I: ?Sized> PartialEq<I> for BashArray
+impl<T: ?Sized, I: ?Sized> PartialEq<I> for BashArray
 where
     for<'a> &'a I: IntoIterator<Item = &'a T>,
+    BashString: PartialEq<T>,
 {
     fn eq(&self, other: &I) -> bool {
         let mut this = self.values();
@@ -160,6 +189,12 @@ where
                 (_, _) => return false,
             }
         }
+    }
+}
+
+impl PartialEq<Self> for BashArray {
+    fn eq(&self, other: &Self) -> bool {
+        self.entries().eq(other.entries())
     }
 }
 
@@ -210,18 +245,22 @@ mod conversion {
         let array = BashArray::new("([0]=standard [1]=array)").unwrap();
         assert_eq!(array.source(), "([0]=standard [1]=array)");
         assert_eq!(array, ["standard", "array"]);
+        assert_eq!(array, array.reescape().unwrap());
 
         let array = BashArray::new("(simplified 'bash array')").unwrap();
         assert_eq!(array.source(), "(simplified 'bash array')");
         assert_eq!(array, ["simplified", "bash array"]);
+        assert_eq!(array, array.reescape().unwrap());
 
         let array = BashArray::new("([0]='bash\narray' [10]=with [100]=holes)").unwrap();
         assert_eq!(array.source(), "([0]='bash\narray' [10]=with [100]=holes)");
         assert_eq!(array, ["bash\narray", "with", "holes"]);
+        assert_eq!(array, array.reescape().unwrap());
 
         let array = BashArray::new("($(echo some output))").unwrap();
         assert_eq!(array.source(), "($(echo some output))");
         assert_eq!(array, ["some", "output"]);
+        assert_eq!(array, array.reescape().unwrap());
     }
 
     #[test]
@@ -242,16 +281,19 @@ mod conversion {
         assert_eq!(array, ["simplified", "array"]);
         assert_eq!(array.to_bash_string().unwrap(), "simplified");
         assert_eq!(array.to_concatenated_string().unwrap(), "simplified array");
+        assert_eq!(array.reescape().unwrap().source(), "(simplified array)");
 
         let array = BashArray::new("([0]='single entry' [1]=another)").unwrap();
         assert_eq!(array, ["single entry", "another"]);
         assert_eq!(array.to_bash_string().unwrap(), "single entry");
         assert_eq!(array.to_concatenated_string().unwrap(), "single entry another");
+        assert_eq!(array.reescape().unwrap().source(), "('single entry' another)");
 
         let array = BashArray::new("([0]='bash\narray' [10]=with [100]=holes)").unwrap();
         assert_eq!(array, ["bash\narray", "with", "holes"]);
         assert_eq!(array.to_bash_string().unwrap(), "bash\narray");
         assert_eq!(array.to_concatenated_string().unwrap(), "bash\narray with holes");
+        assert_eq!(array.reescape().unwrap().source(), "($'bash\\narray' [10]=with [100]=holes)");
     }
 
     #[test]

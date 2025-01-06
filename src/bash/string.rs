@@ -169,6 +169,15 @@ impl BashString {
         let output = exec::rbash_with_output(&command)?;
         BashArray::new(output)
     }
+
+    /// Recreate a quoted string from it's byte contents.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Err`] for runtime errors in Bash.
+    pub fn reescape(&self) -> Result<Self> {
+        Self::from_raw(self.as_raw())
+    }
 }
 
 /// Tries to convert as a quoted string, but uses unquoted string as fallback.
@@ -378,11 +387,13 @@ mod basic_impl {
         let string = BashString::from_raw(b"Hello \xF0\x90\x80World".as_slice()).unwrap();
         assert_eq!(string.to_utf8_lossy(), "Hello �World");
         assert_ne!(string, "Hello �World");
+        assert_eq!(string, string.reescape().unwrap());
 
         let string = BashString::from_escaped("'Simple string!'").unwrap();
         assert_eq!(string.as_utf8(), Ok("Simple string!"));
         assert_eq!(string.to_utf8_lossy(), "Simple string!");
         assert_eq!(string, "Simple string!");
+        assert_eq!(string, string.reescape().unwrap());
     }
 
     #[test]

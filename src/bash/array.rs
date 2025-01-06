@@ -114,26 +114,9 @@ impl BashArray {
     ///
     /// Returns [`Err`] for runtime errors in Bash.
     pub fn reescape(&self) -> Result<Self> {
-        let content = self
-            .entries()
+        self.entries()
             .map(|(idx, string)| Ok((idx, string.reescape()?)))
-            .collect::<Result<Box<_>>>()?;
-
-        let mut source = String::with_capacity(self.source.len());
-        source.push('(');
-        for (pos, (idx, reescaped)) in content.iter().enumerate() {
-            if pos > 0 {
-                source.push(' ');
-            }
-            if pos.try_into() != Ok(*idx) {
-                write!(&mut source, "[{idx}]=")?;
-            }
-            source.push_str(reescaped.source());
-        }
-        source.push(')');
-
-        let source = source.into_boxed_str();
-        Ok(Self { source, content })
+            .collect()
     }
 
     /// Iterator of the `(index, string)` pairs.
@@ -171,6 +154,34 @@ impl BashArray {
     #[must_use]
     pub fn into_values(self) -> impl DoubleEndedIterator<Item = BashString> + ExactSizeIterator + FusedIterator {
         self.into_entries().map(|(_, value)| value)
+    }
+}
+
+impl FromIterator<(i32, BashString)> for BashArray {
+    fn from_iter<T: IntoIterator<Item = (i32, BashString)>>(iter: T) -> Self {
+        let content: Box<[(i32, BashString)]> = iter.into_iter().collect();
+
+        let mut source = String::new();
+        source.push('(');
+        for (pos, (idx, reescaped)) in content.iter().enumerate() {
+            if pos > 0 {
+                source.push(' ');
+            }
+            if pos.try_into() != Ok(*idx) {
+                write!(&mut source, "[{idx}]=").expect("allocation failed while writing indexes");
+            }
+            source.push_str(reescaped.source());
+        }
+        source.push(')');
+
+        let source = source.into_boxed_str();
+        Self { source, content }
+    }
+}
+
+impl FromIterator<BashString> for BashArray {
+    fn from_iter<T: IntoIterator<Item = BashString>>(iter: T) -> Self {
+        (0..=i32::MAX).zip(iter).collect()
     }
 }
 

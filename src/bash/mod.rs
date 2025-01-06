@@ -14,6 +14,9 @@ mod string;
 pub use array::BashArray;
 pub use string::BashString;
 
+/// List of `NAME=VALUE` variables from Bash.
+pub type Environment = HashMap<BashString, BashValue>;
+
 /// Source a bash file and capture environment variables.
 ///
 /// Note that this doesn't make a distinction from globallly imported variable and local variables created at source.
@@ -23,7 +26,7 @@ pub use string::BashString;
 /// # Errors
 ///
 /// Could fail with runtime errors or path resolution errors.
-pub fn source(path: &Path) -> Result<HashMap<BashString, BashValue>> {
+pub fn source(path: &Path) -> Result<Environment> {
     let (dir, file) = exec::resolve_file(path)?;
     let command = format_bytes!(
         b"source '{}' 1>&-

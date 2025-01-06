@@ -97,7 +97,6 @@ impl BashValue {
         }
     }
 
-
     /// If this is an array value, access it.
     #[inline]
     #[must_use]

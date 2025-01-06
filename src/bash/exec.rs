@@ -39,7 +39,7 @@ pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
     write_bytes!(&mut stdin, b"set -o errexit\n")?;
     write_bytes!(&mut stdin, b"{}\n", commands)?;
     write_bytes!(&mut stdin, b"exit\n")?;
-    core::mem::drop(stdin);
+    std::mem::drop(stdin);
 
     let output = child.wait_with_output()?;
 

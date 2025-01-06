@@ -1,8 +1,8 @@
 //! Working with Bash arrays.
 
-use core::fmt::{self, Write};
-use core::hash::{Hash, Hasher};
-use core::iter::FusedIterator;
+use std::fmt::{self, Write};
+use std::hash::{Hash, Hasher};
+use std::iter::FusedIterator;
 
 use anyhow::{Result, bail};
 use format_bytes::format_bytes;

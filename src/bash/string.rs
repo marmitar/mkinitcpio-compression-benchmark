@@ -1,14 +1,14 @@
 //! Working with Bash strings.
 
-use alloc::borrow::Cow;
-use core::borrow::{Borrow, BorrowMut};
-use core::cmp::Ordering;
-use core::fmt;
-use core::hash::{Hash, Hasher};
-use core::ops::{Deref, DerefMut};
-use core::str::{FromStr, Utf8Error};
+use std::borrow::Cow;
+use std::borrow::{Borrow, BorrowMut};
+use std::cmp::Ordering;
+use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
+use std::ops::{Deref, DerefMut};
 use std::os::unix::ffi::OsStrExt;
+use std::str::{FromStr, Utf8Error};
 
 use anyhow::{Context, Result};
 use format_bytes::{DisplayBytes, format_bytes};
@@ -109,7 +109,7 @@ impl BashString {
     /// Returns [`Err`] if the raw string is not UTF-8 data.
     #[inline]
     pub const fn as_utf8(&self) -> Result<&str, Utf8Error> {
-        core::str::from_utf8(self.as_raw())
+        std::str::from_utf8(self.as_raw())
     }
 
     /// Unquoted string as UTF-8, replacing invalid characters.

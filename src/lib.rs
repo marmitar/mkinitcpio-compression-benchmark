@@ -6,8 +6,6 @@
 #![deny(clippy::allow_attributes)]
 #![deny(clippy::allow_attributes_without_reason)]
 #![deny(clippy::lossy_float_literal)]
-#![deny(clippy::std_instead_of_alloc)]
-#![deny(clippy::std_instead_of_core)]
 // More Warnings
 #![warn(clippy::alloc_instead_of_core)]
 #![warn(clippy::as_underscore)]
@@ -60,6 +58,7 @@
 extern crate alloc;
 
 pub mod bash;
+// pub mod mkinitcpio;
 pub mod sudo;
 mod user_spec;
 

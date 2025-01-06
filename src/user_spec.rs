@@ -1,7 +1,7 @@
 //! Handles UNIX user spec in the format `user:group`.
 
-use core::fmt::{self, Write};
-use core::str::FromStr;
+use std::fmt::{self, Write};
+use std::str::FromStr;
 
 use anyhow::{Result, bail};
 use nix::unistd::{Group, Uid, User};

@@ -256,6 +256,7 @@ mod conversion {
         let array = BashArray::new("([0]=standard [1]=array)").unwrap();
         assert_eq!(array.source(), "([0]=standard [1]=array)");
         assert_eq!(array, ["standard", "array"]);
+        assert_ne!(array, ["standard", "array", "extra"]);
         assert_eq!(array, array.reescape().unwrap());
 
         let array = BashArray::new("(simplified 'bash array')").unwrap();

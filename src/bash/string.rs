@@ -3,11 +3,13 @@
 use std::borrow::Cow;
 use std::borrow::{Borrow, BorrowMut};
 use std::cmp::Ordering;
+use std::ffi::OsStr;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::{self, Write};
 use std::ops::{Deref, DerefMut};
 use std::os::unix::ffi::OsStrExt;
+use std::path::Path;
 use std::str::{FromStr, Utf8Error};
 
 use anyhow::{Context, Result};
@@ -123,6 +125,13 @@ impl BashString {
     #[must_use]
     pub fn as_repr(&self) -> String {
         repr_byte_str(self.as_raw())
+    }
+
+    /// Convert bytes to a path.
+    #[inline]
+    #[must_use]
+    pub fn as_path(&self) -> &Path {
+        Path::new(OsStr::from_bytes(self.as_raw()))
     }
 
     /// Uses `read` to split the string into an array.

@@ -155,6 +155,7 @@ mod tests {
 # in this array.  For instance:
 #     MODULES=(usbhid xhci_hcd)
 MODULES=(amdgpu nvidia-drm)
+MODULES+=(i915)
 
 # BINARIES
 # This setting includes any additional binaries a given user may
@@ -244,7 +245,7 @@ MODULES_DECOMPRESS=\"yes\"
 
         let config = Config::load_config(&config_path).unwrap();
 
-        assert_eq!(*config.modules.as_ref().unwrap(), ["amdgpu", "nvidia-drm"]);
+        assert_eq!(*config.modules.as_ref().unwrap(), ["amdgpu", "nvidia-drm", "i915"]);
         assert_eq!(*config.binaries.as_ref().unwrap(), [""; 0]);
         assert_eq!(*config.files.as_ref().unwrap(), ["/usr/lib/firmware/edid/custom-edid.bin"]);
         assert_eq!(*config.hooks.as_ref().unwrap(), [
@@ -271,7 +272,7 @@ MODULES_DECOMPRESS=\"yes\"
         assert_eq!(
             content.trim(),
             "
-MODULES=(amdgpu nvidia-drm)
+MODULES=(amdgpu nvidia-drm i915)
 BINARIES=()
 FILES=(/usr/lib/firmware/edid/custom-edid.bin)
 HOOKS=(base udev autodetect microcode modconf kms keyboard keymap consolefont block filesystems fsck)

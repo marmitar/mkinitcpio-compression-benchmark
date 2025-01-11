@@ -1,6 +1,5 @@
 //! Execution and configuration of `mkinitcpio`.
 
-use std::io::Write;
 use std::path::Path;
 use std::process::Command;
 
@@ -19,12 +18,19 @@ pub use preset::Preset;
 /// # Errors
 ///
 /// Multiple reasons.
-pub fn mkinitcpio(preset: &Path) -> Result<String> {
+pub fn mkinitcpio(preset: &Path) -> Result<()> {
+    log::trace!("mkinitcpio: preset={}", preset.display());
     let output = Command::new("/usr/bin/mkinitcpio")
         .arg("--preset")
         .arg(preset)
         .output()?;
 
+    log::trace!(
+        "mkinitcpio: exit={}, #lines stdout={}, #lines stderr={}",
+        output.status,
+        output.stdout.split(|&ch| ch == b'\n').count(),
+        output.stderr.split(|&ch| ch == b'\n').count()
+    );
     if !output.status.success() {
         let message = "mkinitcpio failed";
         let stderr = String::from_utf8_lossy(&output.stderr);
@@ -37,8 +43,11 @@ pub fn mkinitcpio(preset: &Path) -> Result<String> {
         }
     }
 
-    std::io::stderr().write_all(&output.stderr)?;
-
-    let stdout = String::from_utf8_lossy(&output.stdout);
-    Ok(stdout.into_owned())
+    for line in output.stderr.split(|&ch| ch == b'\n') {
+        log::error!("mkinitcpio: {}", line.escape_ascii());
+    }
+    for line in output.stdout.split(|&ch| ch == b'\n') {
+        log::info!("mkinitcpio: {}", line.escape_ascii());
+    }
+    Ok(())
 }

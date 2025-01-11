@@ -1,7 +1,6 @@
 //! Invoking Bash.
 
 use std::ffi::OsString;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
@@ -23,6 +22,7 @@ pub fn rbash(commands: impl AsRef<[u8]>) -> Result<Vec<u8>> {
 ///
 /// Runtime or bash errors.
 pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
+    log::trace!("rbash: dir={}", dir.display());
     let mut child = Command::new("/usr/bin/bash")
         .env_clear()
         .current_dir(dir)
@@ -36,12 +36,19 @@ pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
         bail!("no stdin pipe provided to communicate with bash");
     };
 
+    log::trace!("rbash: commands={}", commands.escape_ascii());
     write_bytes!(&mut stdin, b"set -o errexit\n")?;
     write_bytes!(&mut stdin, b"{}\n", commands)?;
     write_bytes!(&mut stdin, b"exit\n")?;
     std::mem::drop(stdin);
 
     let output = child.wait_with_output()?;
+    log::trace!(
+        "rbash: exit={}, #lines stdout={}, #lines stderr={}",
+        output.status,
+        output.stdout.split(|&ch| ch == b'\n').count(),
+        output.stderr.split(|&ch| ch == b'\n').count()
+    );
 
     if !output.status.success() {
         let message = "bash script failed";
@@ -55,7 +62,9 @@ pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
         }
     }
 
-    std::io::stderr().write_all(&output.stderr)?;
+    for line in output.stderr.split(|&ch| ch == b'\n') {
+        log::error!("rbash: {}", line.escape_ascii());
+    }
     Ok(output.stdout)
 }
 
@@ -113,6 +122,7 @@ pub fn rbash_with_output_at(commands: &[u8], dir: &Path) -> Result<String> {
 /// Path could not be found or it is not a file.
 pub fn resolve_file(input_path: &Path) -> Result<(PathBuf, OsString)> {
     let path = input_path.canonicalize()?;
+    log::trace!("resolve_file: {} => {}", input_path.display(), path.display());
 
     if !path.is_file() {
         bail!("not a file: {} (resolved from {})", path.display(), input_path.display());

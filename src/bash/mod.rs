@@ -48,6 +48,7 @@ fn parse_vars<K, V, C: FromIterator<(K, V)>>(
         .lines()
         .filter(|line| !line.trim().is_empty())
         .map(|line| {
+            log::trace!("parse_vars: {line}");
             let Some((name, value)) = line.split_once('=') else {
                 bail!("missing variable assignment: {line}");
             };

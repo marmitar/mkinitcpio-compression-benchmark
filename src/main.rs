@@ -84,18 +84,21 @@ pub fn main() -> Result<()> {
     let cli = Cli::parse();
     let outdir = std::path::absolute(cli.outdir)?;
     let chown = cli.chown;
+    let current_user = UserSpec::current_user()?;
+
+    log::debug!("current user = {}", current_user.to_spec());
+    log::debug!("outdir = {}", outdir.display());
+    log::debug!("chown = {}", chown.to_spec());
 
     if !sudo::is_root() {
-        println!("program requires root to access mkinitcpio");
+        log::info!("program requires root to access mkinitcpio");
 
-        let program = std::env::current_exe()?;
-
-        let current_user = UserSpec::current_user()?;
         let target_user = UserSpec {
             owner: chown.owner.or(current_user.owner),
             group: chown.group.or(current_user.group),
         };
 
+        let program = std::env::current_exe()?;
         sudo::run0([
             program.into_os_string().into_vec(),
             format!("--chown={:+}", target_user.to_numeric_spec()).into(),

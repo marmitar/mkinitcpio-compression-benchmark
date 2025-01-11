@@ -144,9 +144,10 @@ impl Preset {
     /// IO and other runtime errors.
     pub fn save_to(&self, path: &Path) -> Result<()> {
         if let Some(dir) = path.parent() {
-            if let Err(err) = std::fs::create_dir_all(dir) {
-                if err.kind() != io::ErrorKind::AlreadyExists {
-                    return Err(err.into());
+            if let Err(error) = std::fs::create_dir_all(dir) {
+                log::info!("create_dir_all: error={error}");
+                if error.kind() != io::ErrorKind::AlreadyExists {
+                    return Err(error.into());
                 }
             }
         }

@@ -31,8 +31,10 @@ impl UserSpec {
     ///
     /// - Runtime UNIX errors (`EINTR`, `ENOMEM`, `ERANGE`, `EMFILE`, etc.)
     pub fn current_user() -> Result<Self> {
-        let Some(owner) = User::from_uid(Uid::current())? else {
-            bail!("could not find current user (uid = {})", Uid::current());
+        let uid = Uid::current();
+        log::trace!("current_user: uid={uid}");
+        let Some(owner) = User::from_uid(uid)? else {
+            bail!("could not find current user (uid = {uid})");
         };
         let Some(group) = Group::from_gid(owner.gid)? else {
             bail!("could not find login group of user '{}'", owner.name);
@@ -191,9 +193,11 @@ fn parse_spec(spec: &str) -> Result<UserSpec> {
         Some((user, group)) => (user, group, true),
         None => (spec, "", false),
     };
+    log::trace!("parse_spec: username={username:?}, has_colon={has_colon}, groupname={groupname:?}");
 
     let user = get_item("user", username, User::from_name, User::from_uid)?;
     let mut group = get_item("group", groupname, Group::from_name, Group::from_gid)?;
+    log::trace!("parse_spec: resolved user={user:?}, group={group:?}");
 
     // A separator was given, but a group was not specified, so get the login group.
     if group.is_none() && has_colon {
@@ -202,6 +206,7 @@ fn parse_spec(spec: &str) -> Result<UserSpec> {
                 bail!("invalid login group {} for user '{}'", user.gid, user.name);
             };
             group = Some(login_group);
+            log::trace!("parse_spec: updated user={user:?}, group={group:?}");
         }
     }
 

@@ -26,27 +26,34 @@ use super::exec;
 /// - Uses `$'...'` evalutation for escaped characters (e.g. `\n`).
 /// - Doesn't work nicely with `\0`
 fn escape(data: &[u8]) -> Result<Box<str>> {
+    log::trace!("escape: input={}", data.escape_ascii());
     let mut temp = NamedTempFile::new()?;
     temp.write_all(data)?;
     let temp = temp.into_temp_path();
+    log::trace!("escape: temp file={}", temp.display());
 
     let (dir, file) = exec::resolve_file(&temp)?;
     let command = format_bytes!(b"OUTPUT=\"$(cat '{}')\"", file.as_bytes());
 
-    Ok(exec::rbash_with_output_at(&command, &dir)?.into())
+    let output = exec::rbash_with_output_at(&command, &dir)?.into();
+    log::trace!("escape: output={output:?}");
+    Ok(output)
 }
 
 /// Resolve a quoted Bash string.
 ///
 /// Works mostly as the inverse of [`escape`].
 fn unescape(text: &str) -> Result<Box<[u8]>> {
+    log::trace!("escape: input={text:?}");
     let command = format_bytes!(
         b"INPUT={}
         echo -n \"$INPUT\"",
         text.trim().as_bytes(),
     );
 
-    Ok(exec::rbash(&command)?.into())
+    let output = exec::rbash(&command)?.into();
+    log::trace!("unescape: output={output:?}");
+    Ok(output)
 }
 
 /// Represents a normal string value in Bash, quoted and unquoted.

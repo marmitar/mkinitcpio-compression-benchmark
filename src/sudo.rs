@@ -28,17 +28,22 @@ pub fn run0(program: impl IntoIterator<Item = impl Into<Vec<u8>>>) -> Result<Inf
     let mut args = vec![binary.to_owned()];
     for &env in SHARED_ENVS {
         if std::env::var_os(env).is_some() {
+            log::trace!("run0: using env {env:?}");
             let arg = format!("--setenv={env}");
             args.push(CString::new(arg)?);
+        } else {
+            log::trace!("run0: skipping env {env:?}");
         }
     }
 
     args.push(c"--".to_owned());
     for arg in program {
-        args.push(CString::new(arg)?);
+        let arg = CString::new(arg)?;
+        log::trace!("run0: argument {arg:?}");
+        args.push(arg);
     }
 
-    println!("{args:?}");
+    log::debug!("execv: {:?} {:?}", binary, args);
     Ok(execv(binary, &args)?)
 }
 
@@ -46,5 +51,7 @@ pub fn run0(program: impl IntoIterator<Item = impl Into<Vec<u8>>>) -> Result<Inf
 #[inline]
 #[must_use]
 pub fn is_root() -> bool {
-    Uid::effective().is_root()
+    let uid = Uid::effective();
+    log::trace!("is_root: uid={uid}, is_root={}", uid.is_root());
+    uid.is_root()
 }

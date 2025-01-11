@@ -12,6 +12,7 @@ anyhow = "^1.0.95"
 clap = { version = "^4.5.23", features = ["derive"] }
 format-bytes = "^0.3.0"
 hashbrown = "^0.15.2"
+log = "^0.4.22"
 tempfile = "^3.15.0"
 
 [dependencies.nix]

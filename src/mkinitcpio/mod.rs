@@ -27,27 +27,39 @@ pub fn create_mock_preset(
     output_dir: &Path,
     default_config: &mut Option<Config>,
 ) -> Result<PathBuf> {
-    let preset_dir = output_dir.join(preset.filename.as_path().with_extension("")).join(preset.name.as_path());
+    log::trace!("create_mock_preset: preset={}, output_dir={}", preset.name, output_dir.display());
+    let preset_dir = output_dir
+        .join(preset.filename.as_path().with_extension(""))
+        .join(preset.name.as_path());
     cleanup(&preset_dir)?;
     create_dir(&preset_dir)?;
 
     let mut preset_config = preset.load_config()?;
+    log::debug!(
+        "create_mock_preset: preset_config={:?}, default_config={:?}",
+        preset_config.is_some(),
+        default_config.is_some()
+    );
     let config = match (&mut preset_config, default_config) {
         (Some(config), _) | (None, Some(config)) => config,
-        (None, config@None) => config.get_or_insert(Config::load_default()?)
+        (None, config @ None) => config.get_or_insert(Config::load_default()?),
     };
 
     let config_file = preset_dir.join("mkinitcpio.conf");
     config.compression.replace(BashString::from_raw(*b"cat")?);
     config.compression_options.take();
+    log::trace!("create_mock_preset: config_file={}", config_file.display());
     config.save_to(&config_file)?;
 
     preset.config.replace(BashString::from_path(config_file)?);
-    preset.image.replace(BashString::from_path(preset_dir.join("test.img"))?);
+    preset
+        .image
+        .replace(BashString::from_path(preset_dir.join("test.img"))?);
     preset.uki.replace(BashString::from_path(preset_dir.join("test.efi"))?);
     preset.efi_image.take();
 
-    let preset_file = preset_dir.join(preset.filename.as_path());
+    let preset_file = preset_dir.join(preset.filename.as_path()).with_extension("preset");
+    log::trace!("create_mock_preset: preset_file={}", preset_file.display());
     preset.save_to(&preset_file)?;
 
     Ok(preset_file)
@@ -60,8 +72,10 @@ pub fn create_mock_preset(
 /// Same as [`std::fs::create_dir_all`], except that [`ErrorKind::AlreadyExists`] is ignored.
 fn create_dir(at: &Path) -> Result<()> {
     if let Err(error) = std::fs::create_dir_all(at) {
-        log::info!("create_dir_all: at={}, error={error}", at.display());
-        if error.kind() != ErrorKind::AlreadyExists {
+        if error.kind() == ErrorKind::AlreadyExists {
+            log::debug!("create_dir_all: at={}, error={error}", at.display());
+        } else {
+            log::warn!("create_dir_all: at={}, error={error}", at.display());
             return Err(error.into());
         }
     }
@@ -84,11 +98,12 @@ fn cleanup(dir: &Path) -> Result<()> {
             log::debug!("cleanup: dir={}, is_dir=false", dir.display());
             std::fs::remove_file(dir)?;
         }
+        Err(error) if error.kind() == ErrorKind::NotFound => {
+            log::debug!("cleanup: dir={}, error={error}", dir.display());
+        }
         Err(error) => {
-            log::info!("cleanup: dir={}, error={error}", dir.display());
-            if error.kind() != ErrorKind::NotFound {
-                return Err(error.into());
-            }
+            log::warn!("cleanup: dir={}, error={error}", dir.display());
+            return Err(error.into());
         }
     }
     Ok(())

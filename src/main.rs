@@ -56,15 +56,16 @@
 #![warn(clippy::unnecessary_self_imports)]
 
 use std::os::unix::ffi::OsStringExt;
+use std::panic;
 use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
-use mkinitcpio_compression_benchmark::mkinitcpio::{create_mock_preset, Preset};
+use mkinitcpio_compression_benchmark::mkinitcpio::{Preset, create_mock_preset};
 use mkinitcpio_compression_benchmark::{UserSpec, sudo};
 
 /// Run some benchmarks on mkinitcpio compression and decompression algorithms
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None)]
 struct Cli {
     /// Directory to place output files.
@@ -77,26 +78,43 @@ struct Cli {
 }
 
 /// Binary entrypoint.
+pub fn main() {
+    env_logger::init();
+    let cli = Cli::parse();
+    let result = panic::catch_unwind(|| run(cli.clone()));
+
+    log::debug!("recursive_chown: owner={}, path={}", cli.chown, cli.outdir.display());
+    if let Err(error) = cli.chown.recursive_chown(&cli.outdir) {
+        log::warn!("{error}");
+    }
+
+    match result {
+        Err(error) => panic::resume_unwind(error),
+        Ok(Err(error)) => log::error!("{error}"),
+        Ok(Ok(())) => (),
+    }
+}
+
+/// Normal execution.
 ///
 /// # Errors
 ///
 /// Any runtime error in the program.
-pub fn main() -> Result<()> {
-    let cli = Cli::parse();
+fn run(cli: Cli) -> Result<()> {
+    let user = cli.chown;
     let outdir = std::path::absolute(cli.outdir)?;
-    let chown = cli.chown;
     let current_user = UserSpec::current_user()?;
 
     log::debug!("current user = {}", current_user.to_spec());
     log::debug!("outdir = {}", outdir.display());
-    log::debug!("chown = {}", chown.to_spec());
+    log::debug!("chown = {}", user.to_spec());
 
     if !sudo::is_root() {
         log::info!("program requires root to access mkinitcpio");
 
         let target_user = UserSpec {
-            owner: chown.owner.or(current_user.owner),
-            group: chown.group.or(current_user.group),
+            owner: user.owner.or(current_user.owner),
+            group: user.group.or(current_user.group),
         };
 
         let program = std::env::current_exe()?;
@@ -113,5 +131,5 @@ pub fn main() -> Result<()> {
         let preset = create_mock_preset(preset, &outdir, &mut default_config)?;
         log::info!("preset = {}", preset.display());
     }
-    todo!("{chown}");
+    todo!("{user}");
 }

@@ -8,6 +8,7 @@ use nix::unistd::execv;
 /// Variables that shall be passed to the program across `run0`, if present.
 const SHARED_ENVS: &[&str] = &[
     "RUST_BACKTRACE",
+    "RUST_LOG",
     "LS_COLORS",
     // https://bixense.com/clicolors/
     "NO_COLOR",

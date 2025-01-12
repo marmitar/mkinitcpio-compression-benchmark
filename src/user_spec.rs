@@ -1,10 +1,11 @@
 //! Handles UNIX user spec in the format `user:group`.
 
 use std::fmt::{self, Write};
+use std::path::Path;
 use std::str::FromStr;
 
 use anyhow::{Result, bail};
-use nix::unistd::{Group, Uid, User};
+use nix::unistd::{Group, Uid, User, chown};
 
 /// Represents a UNIX user spec from format `user:group`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -118,6 +119,36 @@ impl UserSpec {
         UserSpecFormatter {
             spec: self,
             numeric: false,
+        }
+    }
+
+    /// Replace ownership recursively.
+    ///
+    /// Keep changing ownership after partial failures.
+    ///
+    /// # Errors
+    ///
+    /// IO errors.
+    pub fn recursive_chown(&self, path: &Path) -> Result<()> {
+        log::trace!("recursive_chown: path={}, is_dir={}", path.display(), path.is_dir());
+        chown(path, self.owner.as_ref().map(|user| user.uid), self.group.as_ref().map(|group| group.gid))?;
+
+        if path.is_dir() {
+            let mut result = Ok(());
+            for entry in std::fs::read_dir(path)? {
+                let latest_error = match entry {
+                    Ok(entry) => self.recursive_chown(&entry.path()).err(),
+                    Err(err) => Some(err.into()),
+                };
+
+                if let Some(error) = latest_error {
+                    log::warn!("recursive_chown: path={}, error={error}", path.display());
+                    result = Err(error);
+                }
+            }
+            result
+        } else {
+            Ok(())
         }
     }
 }

@@ -195,7 +195,7 @@ where
         let mut that = other.into_iter();
         loop {
             match (this.next(), that.next()) {
-                (Some(a), Some(b)) if a == b => continue,
+                (Some(a), Some(b)) if a == b => (),
                 (None, None) => return true,
                 (_, _) => return false,
             }

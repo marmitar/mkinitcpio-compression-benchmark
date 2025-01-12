@@ -16,6 +16,8 @@ use anyhow::{Context, Result};
 use format_bytes::{DisplayBytes, format_bytes};
 use tempfile::NamedTempFile;
 
+use crate::utils::strings::{escaped, repr};
+
 use super::BashArray;
 use super::exec;
 
@@ -83,7 +85,7 @@ impl BashString {
 
     /// See [`Self::from_raw`].
     fn from_raw_boxed(raw: Box<[u8]>) -> Result<Self> {
-        let escaped = escape(&raw).with_context(|| format!("while escaping raw bytes: {}", repr_byte_str(&raw)))?;
+        let escaped = escape(&raw).with_context(|| format!("while escaping raw bytes: {}", escaped(&raw)))?;
         Ok(Self { escaped, raw })
     }
 
@@ -131,7 +133,7 @@ impl BashString {
     #[inline]
     #[must_use]
     pub fn as_repr(&self) -> String {
-        repr_byte_str(self.as_raw())
+        repr(self.as_raw()).to_string()
     }
 
     /// Convert bytes to a path.
@@ -208,35 +210,6 @@ impl FromStr for BashString {
     fn from_str(text: &str) -> Result<Self> {
         Self::from_escaped(text).or_else(|_| Self::from_raw(text.as_bytes()))
     }
-}
-
-/// Represents a single byte with hexadecimal escape (`\x`).
-const fn repr_byte(byte: u8) -> [u8; 4] {
-    const fn hex(num: u8) -> u8 {
-        match num {
-            0..=9 => b'0' + num,
-            10..=16 => b'A' + (num - 10),
-            _ => panic!("number not in hexadecimal range"),
-        }
-    }
-
-    #[expect(clippy::integer_division_remainder_used, reason = "optmized by the compiler")]
-    [b'\\', b'x', hex(byte / 16), hex(byte % 16)]
-}
-
-/// Represents a byte array as Rust source, escaping non UTF-8 characters with hexadecimal (`\x`).
-fn repr_byte_str(bytes: &[u8]) -> String {
-    let content = bytes.utf8_chunks().flat_map(|chunk| {
-        let valid = chunk.valid().escape_debug();
-        let invalid = chunk.invalid().iter().copied().flat_map(repr_byte).map(Into::into);
-        valid.chain(invalid)
-    });
-
-    let mut out = String::with_capacity(bytes.len());
-    out.push_str("b\"");
-    out.extend(content);
-    out.push('"');
-    out
 }
 
 impl fmt::Debug for BashString {
@@ -379,7 +352,8 @@ mod conversion {
 
     #[test]
     fn rust_representation() {
-        assert_eq!(repr_byte_str(b"text with \0 binary \xFF data"), stringify!(b"text with \0 binary \xFF data"));
+        let string = BashString::from_raw(b"text with \0 binary \xFF data".as_slice()).unwrap();
+        assert_eq!(string.as_repr(), stringify!(b"text with \x00 binary \xff data"));
     }
 
     #[test]
@@ -430,7 +404,7 @@ mod basic_impl {
     #[test]
     fn diplay_debug_fmt() {
         let string = BashString::from_raw(b"Hello \xF0\x90\x80World".as_slice()).unwrap();
-        assert_eq!(string.as_repr(), stringify!(b"Hello \xF0\x90\x80World"));
+        assert_eq!(string.as_repr(), stringify!(b"Hello \xf0\x90\x80World"));
         assert_eq!(format!("{:?}", string), "$'Hello \\360\\220\\200World'");
         assert_eq!(string.to_string(), "Hello �World");
 

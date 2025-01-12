@@ -61,5 +61,6 @@ pub mod bash;
 pub mod mkinitcpio;
 pub mod sudo;
 mod user_spec;
+mod utils;
 
 pub use user_spec::UserSpec;

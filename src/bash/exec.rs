@@ -7,6 +7,8 @@ use std::process::{Command, Stdio};
 use anyhow::{Result, bail};
 use format_bytes::{format_bytes, write_bytes};
 
+use crate::utils::strings::lines;
+
 /// Run a restricted Bash shell.
 ///
 /// # Errors
@@ -46,8 +48,8 @@ pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
     log::trace!(
         "rbash: exit={}, #lines stdout={}, #lines stderr={}",
         output.status,
-        output.stdout.split(|&ch| ch == b'\n').count(),
-        output.stderr.split(|&ch| ch == b'\n').count()
+        lines(&output.stdout).count(),
+        lines(&output.stderr).count()
     );
 
     if !output.status.success() {
@@ -62,7 +64,7 @@ pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
         }
     }
 
-    for line in output.stderr.split(|&ch| ch == b'\n') {
+    for line in lines(&output.stderr) {
         log::error!("rbash: {}", line.escape_ascii());
     }
     Ok(output.stdout)

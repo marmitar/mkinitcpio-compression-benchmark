@@ -11,6 +11,8 @@ mod preset;
 pub use config::Config;
 pub use preset::Preset;
 
+use crate::utils::strings::lines;
+
 /// Run `mkinitcpio` using the provided preset file.
 ///
 /// Return `stdout` for verbose output.
@@ -28,8 +30,8 @@ pub fn mkinitcpio(preset: &Path) -> Result<()> {
     log::trace!(
         "mkinitcpio: exit={}, #lines stdout={}, #lines stderr={}",
         output.status,
-        output.stdout.split(|&ch| ch == b'\n').count(),
-        output.stderr.split(|&ch| ch == b'\n').count()
+        lines(&output.stdout).count(),
+        lines(&output.stderr).count()
     );
     if !output.status.success() {
         let message = "mkinitcpio failed";
@@ -43,10 +45,10 @@ pub fn mkinitcpio(preset: &Path) -> Result<()> {
         }
     }
 
-    for line in output.stderr.split(|&ch| ch == b'\n') {
+    for line in lines(&output.stderr) {
         log::error!("mkinitcpio: {}", line.escape_ascii());
     }
-    for line in output.stdout.split(|&ch| ch == b'\n') {
+    for line in lines(&output.stdout) {
         log::info!("mkinitcpio: {}", line.escape_ascii());
     }
     Ok(())

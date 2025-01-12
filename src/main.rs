@@ -60,6 +60,7 @@ use std::path::PathBuf;
 
 use anyhow::Result;
 use clap::Parser;
+use mkinitcpio_compression_benchmark::mkinitcpio::{create_mock_preset, Preset};
 use mkinitcpio_compression_benchmark::{UserSpec, sudo};
 
 /// Run some benchmarks on mkinitcpio compression and decompression algorithms
@@ -67,11 +68,11 @@ use mkinitcpio_compression_benchmark::{UserSpec, sudo};
 #[command(version, about, long_about = None)]
 struct Cli {
     /// Directory to place output files.
-    #[arg(short, long, default_value = "./output")]
+    #[arg(short, long, default_value = "./output", required = false)]
     outdir: PathBuf,
 
     /// Set owner for output directories and files.
-    #[arg(short, long, value_name = "[OWNER][:[GROUP]]", required = false)]
+    #[arg(short, long, value_name = "[OWNER][:[GROUP]]", default_value = ":", required = false)]
     chown: UserSpec,
 }
 
@@ -107,5 +108,10 @@ pub fn main() -> Result<()> {
         unreachable!("exec run0 should either replace the process or fail, ending current execution here");
     }
 
+    let mut default_config = None;
+    for preset in Preset::load_default_presets()? {
+        let preset = create_mock_preset(preset, &outdir, &mut default_config)?;
+        log::info!("preset = {}", preset.display());
+    }
     todo!("{chown}");
 }

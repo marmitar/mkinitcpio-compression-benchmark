@@ -1,3 +1,3 @@
 //! Utilities.
 
-pub(crate) mod strings;
+pub mod strings;

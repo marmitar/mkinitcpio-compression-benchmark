@@ -1,8 +1,7 @@
 //! Processing preset files for `mkinitcpio`.
 
-use std::os::unix::ffi::OsStrExt;
+use std::fmt;
 use std::path::Path;
-use std::{fmt, io};
 
 use anyhow::{Result, bail};
 use format_bytes::format_bytes;
@@ -90,7 +89,7 @@ impl Preset {
         let Some(filename) = preset_path.file_stem() else {
             bail!("missing filename for preset: {}", preset_path.display());
         };
-        let filename = BashString::from_raw(filename.as_bytes())?;
+        let filename = BashString::from_path(filename)?;
 
         let env = bash::source(preset_path)?;
         let Some(presets) = env.get(b"PRESETS".as_slice()) else {
@@ -144,12 +143,7 @@ impl Preset {
     /// IO and other runtime errors.
     pub fn save_to(&self, path: &Path) -> Result<()> {
         if let Some(dir) = path.parent() {
-            if let Err(error) = std::fs::create_dir_all(dir) {
-                log::info!("create_dir_all: error={error}");
-                if error.kind() != io::ErrorKind::AlreadyExists {
-                    return Err(error.into());
-                }
-            }
+            super::create_dir(dir)?;
         }
 
         std::fs::write(path, self.to_string())?;

@@ -65,7 +65,7 @@ pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
     }
 
     for line in lines(&output.stderr) {
-        log::error!("rbash: {}", line.escape_ascii());
+        log::warn!("rbash: {}", line.escape_ascii());
     }
     Ok(output.stdout)
 }

@@ -1,8 +1,8 @@
 //! Processing config files for `mkinitcpio`.
 
+use std::fmt;
 use std::io::Write;
 use std::path::Path;
-use std::{fmt, io};
 
 use anyhow::Result;
 use tempfile::{NamedTempFile, TempPath};
@@ -83,12 +83,7 @@ impl Config {
     /// IO and other runtime errors.
     pub fn save_to(&self, path: &Path) -> Result<()> {
         if let Some(dir) = path.parent() {
-            if let Err(error) = std::fs::create_dir_all(dir) {
-                log::info!("create_dir_all: error={error}");
-                if error.kind() != io::ErrorKind::AlreadyExists {
-                    return Err(error.into());
-                }
-            }
+            super::create_dir(dir)?;
         }
 
         std::fs::write(path, self.to_string())?;

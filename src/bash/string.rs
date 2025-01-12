@@ -99,6 +99,16 @@ impl BashString {
         Self::from_raw_boxed(bytes.into())
     }
 
+    /// Resolves a Bash string from a path.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Err`] for runtime errors in Bash.
+    #[inline]
+    pub fn from_path(bytes: impl AsRef<Path>) -> Result<Self> {
+        Self::from_raw(bytes.as_ref().as_os_str().as_bytes())
+    }
+
     /// Quoted form of the string.
     #[inline]
     #[must_use]

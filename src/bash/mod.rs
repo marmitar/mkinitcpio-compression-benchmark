@@ -59,7 +59,6 @@ fn parse_vars<K, V, C: FromIterator<(K, V)>>(
 
 /// Represents a value from a variable in Bash.
 #[derive(Clone, PartialEq, Eq, Hash)]
-#[expect(clippy::exhaustive_enums, reason = "only two kinds of variable in Bash")]
 pub enum BashValue {
     /// Simple string variable.
     String(BashString),
@@ -81,6 +80,7 @@ impl BashValue {
         }
     }
 
+    #[cfg(test)]
     /// Quoted form of the string or array.
     #[inline]
     #[must_use]
@@ -91,6 +91,7 @@ impl BashValue {
         }
     }
 
+    #[cfg(test)]
     /// If this is a string value, access it.
     #[inline]
     #[must_use]
@@ -101,6 +102,7 @@ impl BashValue {
         }
     }
 
+    #[cfg(test)]
     /// If this is an array value, access it.
     #[inline]
     #[must_use]

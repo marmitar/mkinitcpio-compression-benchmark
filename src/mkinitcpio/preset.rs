@@ -196,7 +196,9 @@ impl fmt::Display for Preset {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
     use tempfile::TempDir;
+    use test_log::test;
 
     use super::*;
 

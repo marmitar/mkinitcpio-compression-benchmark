@@ -352,6 +352,7 @@ impl DerefMut for BashString {
 #[cfg(test)]
 mod conversion {
     use pretty_assertions::{assert_eq, assert_matches};
+    use test_log::test;
 
     use super::*;
 
@@ -395,6 +396,7 @@ mod conversion {
 #[cfg(test)]
 mod basic_impl {
     use pretty_assertions::{assert_eq, assert_ne};
+    use test_log::test;
 
     use super::*;
 

@@ -118,6 +118,7 @@ mod test {
 
     use pretty_assertions::assert_eq;
     use tempfile::NamedTempFile;
+    use test_log::test;
 
     use super::*;
 

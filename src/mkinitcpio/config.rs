@@ -146,6 +146,9 @@ impl fmt::Display for Config {
 
 #[cfg(test)]
 mod tests {
+    use pretty_assertions::assert_eq;
+    use test_log::test;
+
     use super::*;
 
     fn example_config() -> TempPath {

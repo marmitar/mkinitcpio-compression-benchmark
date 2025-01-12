@@ -136,6 +136,7 @@ pub fn resolve_file(input_path: &Path) -> Result<(PathBuf, OsString)> {
 #[cfg(test)]
 mod rbash {
     use pretty_assertions::{assert_eq, assert_matches};
+    use test_log::test;
 
     use super::*;
 
@@ -197,6 +198,7 @@ mod resolve_file {
     use std::ffi::OsStr;
 
     use pretty_assertions::assert_eq;
+    use test_log::test;
 
     use super::*;
 

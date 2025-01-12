@@ -9,10 +9,10 @@ publish = false
 
 [dependencies]
 anyhow = "^1.0.95"
-clap = { version = "^4.5.23", features = ["derive"] }
+clap = { version = "^4.5.26", features = ["derive"] }
 format-bytes = "^0.3.0"
 hashbrown = "^0.15.2"
-log = "^0.4.22"
+log = "^0.4.24"
 tempfile = "^3.15.0"
 
 [dependencies.nix]
@@ -21,3 +21,4 @@ features = ["fs", "process", "user"]
 
 [dev-dependencies]
 pretty_assertions = { version = "^1.4.1", features = ["unstable"] }
+test-log = { version = "^0.2.16", features = ["unstable"] }

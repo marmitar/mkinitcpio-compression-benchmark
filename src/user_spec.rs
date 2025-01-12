@@ -259,6 +259,7 @@ fn get_item<T, U: From<u32>>(
 mod parsing {
     use nix::unistd::ROOT;
     use pretty_assertions::assert_eq;
+    use test_log::test;
 
     use super::*;
 
@@ -382,6 +383,7 @@ mod parsing {
 #[cfg(test)]
 mod display {
     use pretty_assertions::assert_eq;
+    use test_log::test;
 
     use super::*;
 

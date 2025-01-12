@@ -2,12 +2,12 @@
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::Stdio;
 
 use anyhow::{Result, bail};
 use format_bytes::{format_bytes, write_bytes};
 
-use crate::utils::strings::lines;
+use crate::utils::command;
 
 /// Run a restricted Bash shell.
 ///
@@ -25,13 +25,10 @@ pub fn rbash(commands: impl AsRef<[u8]>) -> Result<Vec<u8>> {
 /// Runtime or bash errors.
 pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
     log::trace!("rbash: dir={}", dir.display());
-    let mut child = Command::new("/usr/bin/bash")
-        .env_clear()
+    let mut child = command::command("/usr/bin/bash")
+        .arg("-r")
         .current_dir(dir)
         .stdin(Stdio::piped())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .arg("-r")
         .spawn()?;
 
     let Some(mut stdin) = child.stdin.take() else {
@@ -42,32 +39,11 @@ pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
     write_bytes!(&mut stdin, b"set -o errexit\n")?;
     write_bytes!(&mut stdin, b"{}\n", commands)?;
     write_bytes!(&mut stdin, b"exit\n")?;
-    std::mem::drop(stdin);
+    drop(stdin);
 
     let output = child.wait_with_output()?;
-    log::trace!(
-        "rbash: exit={}, #lines stdout={}, #lines stderr={}",
-        output.status,
-        lines(&output.stdout).count(),
-        lines(&output.stderr).count()
-    );
-
-    if !output.status.success() {
-        let message = "bash script failed";
-        let stderr = String::from_utf8_lossy(&output.stderr);
-
-        match (output.status.code(), stderr.trim().is_empty()) {
-            (Some(code), false) => bail!("{message} (status = {code}): {stderr}"),
-            (Some(code), true) => bail!("{message} (status = {code})"),
-            (None, false) => bail!("{message}: {stderr}"),
-            (None, true) => bail!("{message}"),
-        }
-    }
-
-    for line in lines(&output.stderr) {
-        log::warn!("rbash: {}", line.escape_ascii());
-    }
-    Ok(output.stdout)
+    let stdout = command::check("rbash", output, false)?;
+    Ok(stdout)
 }
 
 /// Run a restricted Bash shell and show value of `OUTPUT` variable.

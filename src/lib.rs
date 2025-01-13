@@ -58,6 +58,7 @@
 extern crate alloc;
 
 mod bash;
+pub mod measure;
 pub mod mkinitcpio;
 pub mod sudo;
 mod user_spec;

@@ -320,6 +320,7 @@ dependencies = [
  "env_logger",
  "format-bytes",
  "hashbrown",
+ "libc",
  "log",
  "nix",
  "pretty_assertions",

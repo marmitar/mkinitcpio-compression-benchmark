@@ -1,2 +1,2 @@
 allow-unwrap-in-tests = true
-allowed-duplicate-crates = ['syn']
+allowed-duplicate-crates = ['syn', 'hashbrown']

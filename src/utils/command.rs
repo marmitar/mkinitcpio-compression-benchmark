@@ -15,14 +15,15 @@ use super::strings;
 /// [`stdin`]: Command::stdin
 /// [`stdout`]: Command::stdout
 /// [`stderr`]: Command::stderr
-pub fn command(program: impl AsRef<OsStr>) -> Command {
+pub fn command(program: impl AsRef<OsStr>, args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Command {
     log::trace!("command: program={:?}", program.as_ref());
     let mut cmd = Command::new(program);
     cmd.env_clear()
         .current_dir("/")
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+        .stderr(Stdio::piped())
+        .args(args);
     cmd
 }
 

@@ -117,11 +117,7 @@ fn cleanup(dir: &Path) -> Result<()> {
 /// Multiple reasons.
 pub fn mkinitcpio(preset: &Path) -> Result<()> {
     log::trace!("mkinitcpio: preset={}", preset.display());
-    let output = command::command("/usr/bin/mkinitcpio")
-        .arg("--preset")
-        .arg(preset)
-        .output()?;
-
+    let output = command::command("/usr/bin/mkinitcpio", ["--preset".as_ref(), preset.as_os_str()]).output()?;
     command::check("mkinitcpio", output, true)?;
     Ok(())
 }

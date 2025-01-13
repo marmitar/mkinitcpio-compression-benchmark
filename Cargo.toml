@@ -9,6 +9,7 @@ publish = false
 
 [dependencies]
 anyhow = "^1.0.95"
+byte-unit = { version = "^5.1.6", features = ["u128"] }
 clap = { version = "^4.5.26", features = ["derive"] }
 env_logger = "^0.11.6"
 format-bytes = "^0.3.0"

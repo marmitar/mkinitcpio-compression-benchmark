@@ -25,8 +25,7 @@ pub fn rbash(commands: impl AsRef<[u8]>) -> Result<Vec<u8>> {
 /// Runtime or bash errors.
 pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
     log::trace!("rbash: dir={}", dir.display());
-    let mut child = command::command("/usr/bin/bash")
-        .arg("-r")
+    let mut child = command::command("/usr/bin/bash", ["-r"])
         .current_dir(dir)
         .stdin(Stdio::piped())
         .spawn()?;

@@ -3,7 +3,8 @@
 use std::ffi::OsStr;
 use std::io::Read;
 use std::os::unix::ffi::OsStrExt;
-use std::process::{Child, Output};
+use std::process::{Child, Command, Output};
+use std::time::{Instant, SystemTime};
 
 use anyhow::{Context, Result, bail};
 use nix::errno::Errno;
@@ -11,7 +12,7 @@ use nix::unistd::Pid;
 
 mod usage;
 
-pub use usage::Usage;
+pub use usage::Stats;
 
 use crate::utils::command;
 
@@ -22,14 +23,13 @@ use crate::utils::command;
 /// # Errors
 ///
 /// Fails if the program exits with non-zero status, or any other runtime issue.
-pub fn exec(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<Usage> {
+pub fn exec(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<Stats> {
     let mut args = args.into_iter();
     let Some(program) = args.next() else {
         bail!("missing binary to be executed");
     };
 
-    let process = command::command(&program).args(args).spawn()?;
-    let (output, usage) = wait_exit(process)?;
+    let (output, usage) = wait_exit(command::command(&program, args))?;
 
     let name = String::from_utf8_lossy(program.as_ref().as_bytes());
     command::check(&name, output, true)?;
@@ -37,7 +37,12 @@ pub fn exec(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<Usage> 
 }
 
 /// Wait for process to exit, capturing its output and resource usage.
-fn wait_exit(process: Child) -> Result<(Output, Usage)> {
+fn wait_exit(mut command: Command) -> Result<(Output, Stats)> {
+    let wall_time = SystemTime::now();
+    let monotonic_time = Instant::now();
+    let process = command.spawn()?;
+    drop(command);
+
     let pid = process
         .id()
         .try_into()
@@ -45,7 +50,7 @@ fn wait_exit(process: Child) -> Result<(Output, Usage)> {
         .with_context(|| format!("invalid PID: {}", process.id()))?;
 
     let (stdout, stderr) = capture_output(process)?;
-    let usage = wait4(pid)?;
+    let usage = wait4(pid, wall_time, monotonic_time)?;
 
     let output = Output {
         status: usage.exit_status(),
@@ -77,7 +82,7 @@ fn capture_output(mut process: Child) -> Result<(Vec<u8>, Vec<u8>)> {
 /// Wait for process to exit and return its resource usage.
 ///
 /// For more details, see [wait4(2)](https://man.archlinux.org/man/wait4.2).
-fn wait4(pid: Pid) -> Result<Usage> {
+fn wait4(pid: Pid, wall_time: SystemTime, monotonic_time: Instant) -> Result<Stats> {
     log::debug!("wait4: pid={pid}, options not supported in modern Linux");
 
     let mut wstatus: i32 = 0;
@@ -89,10 +94,14 @@ fn wait4(pid: Pid) -> Result<Usage> {
     let errno = Errno::last();
 
     log::trace!("wait4: result={result}, errno={errno}, wstatus={wstatus}, usage={usage:?}");
+    let virtual_time = monotonic_time.elapsed();
+    let real_time = wall_time.elapsed()?;
+    log::trace!("wait4: real_time={real_time:?}, virtual_time={virtual_time:?}");
+
     if result == -1 {
         return Err(errno.into());
     }
-    Usage::from_result(pid, result, wstatus, usage)
+    Stats::from_result(pid, result, wstatus, usage, real_time, virtual_time)
 }
 
 #[cfg(test)]
@@ -104,10 +113,10 @@ mod tests {
 
     #[test]
     fn exec_works() {
-        let usage = exec(["true"]).unwrap();
-        assert_ne!(usage.pid(), Pid::from_raw(0));
-        assert_ne!(usage.pid(), Pid::from_raw(-1));
-        assert_eq!(usage.exit_code(), 0);
+        let stats = exec(["true"]).unwrap();
+        assert_ne!(stats.pid(), Pid::from_raw(0));
+        assert_ne!(stats.pid(), Pid::from_raw(-1));
+        assert_eq!(stats.exit_code(), 0);
 
         let error = exec(["false"]).unwrap_err();
         assert_eq!(error.to_string(), "false failed (status = 1)");
@@ -115,9 +124,9 @@ mod tests {
         let error = exec(["emtpy"; 0]).unwrap_err();
         assert_eq!(error.to_string(), "missing binary to be executed");
 
-        let usage = exec(["echo", "hi"]).unwrap();
-        assert_ne!(usage.pid(), Pid::from_raw(0));
-        assert_ne!(usage.pid(), Pid::from_raw(-1));
-        assert_eq!(usage.exit_code(), 0);
+        let stats = exec(["echo", "hi"]).unwrap();
+        assert_ne!(stats.pid(), Pid::from_raw(0));
+        assert_ne!(stats.pid(), Pid::from_raw(-1));
+        assert_eq!(stats.exit_code(), 0);
     }
 }

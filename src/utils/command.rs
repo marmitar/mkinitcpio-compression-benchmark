@@ -51,7 +51,7 @@ pub fn check(name: &str, output: Output, show_stdout: bool) -> Result<Vec<u8>> {
     }
     if show_stdout {
         for line in strings::lines(&output.stdout) {
-            log::info!("{name}: {}", line.escape_ascii());
+            log::debug!("{name}: {}", line.escape_ascii());
         }
     }
     Ok(output.stdout)

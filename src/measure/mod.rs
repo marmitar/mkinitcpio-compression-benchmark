@@ -6,7 +6,7 @@ use std::os::unix::ffi::OsStrExt;
 use std::process::{Child, Command, Output};
 use std::time::{Instant, SystemTime};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use nix::errno::Errno;
 use nix::unistd::Pid;
 
@@ -23,12 +23,7 @@ use crate::utils::command;
 /// # Errors
 ///
 /// Fails if the program exits with non-zero status, or any other runtime issue.
-pub fn exec(args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<Stats> {
-    let mut args = args.into_iter();
-    let Some(program) = args.next() else {
-        bail!("missing binary to be executed");
-    };
-
+pub fn exec(program: impl AsRef<OsStr>, args: impl IntoIterator<Item = impl AsRef<OsStr>>) -> Result<Stats> {
     let (output, usage) = wait_exit(command::command(&program, args))?;
 
     let name = String::from_utf8_lossy(program.as_ref().as_bytes());
@@ -113,18 +108,15 @@ mod tests {
 
     #[test]
     fn exec_works() {
-        let stats = exec(["true"]).unwrap();
+        let stats = exec("true", [""; 0]).unwrap();
         assert_ne!(stats.pid(), Pid::from_raw(0));
         assert_ne!(stats.pid(), Pid::from_raw(-1));
         assert_eq!(stats.exit_code(), 0);
 
-        let error = exec(["false"]).unwrap_err();
+        let error = exec("false", [""; 0]).unwrap_err();
         assert_eq!(error.to_string(), "false failed (status = 1)");
 
-        let error = exec(["emtpy"; 0]).unwrap_err();
-        assert_eq!(error.to_string(), "missing binary to be executed");
-
-        let stats = exec(["echo", "hi"]).unwrap();
+        let stats = exec("echo", ["hi"]).unwrap();
         assert_ne!(stats.pid(), Pid::from_raw(0));
         assert_ne!(stats.pid(), Pid::from_raw(-1));
         assert_eq!(stats.exit_code(), 0);

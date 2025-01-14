@@ -57,11 +57,15 @@
 
 use std::os::unix::ffi::OsStringExt;
 use std::panic;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+use std::time::Instant;
 
 use anyhow::Result;
+use byte_unit::UnitType;
 use clap::Parser;
-use mkinitcpio_compression_benchmark::mkinitcpio::{Preset, create_mock_preset};
+use mkinitcpio_compression_benchmark::measure::Stats;
+use mkinitcpio_compression_benchmark::mkinitcpio::{Config, Preset, create_mock_preset, mkinitcpio};
 use mkinitcpio_compression_benchmark::{UserSpec, sudo};
 
 /// Run some benchmarks on mkinitcpio compression and decompression algorithms
@@ -78,7 +82,8 @@ struct Cli {
 }
 
 /// Binary entrypoint.
-pub fn main() {
+#[must_use]
+pub fn main() -> ExitCode {
     env_logger::init();
     let cli = Cli::parse();
     let result = panic::catch_unwind(|| run(cli.clone()));
@@ -88,11 +93,12 @@ pub fn main() {
         log::warn!("{error}");
     }
 
-    match result {
-        Err(error) => panic::resume_unwind(error),
-        Ok(Err(error)) => log::error!("{error}"),
-        Ok(Ok(())) => (),
-    }
+    result
+        .unwrap_or_else(|error| panic::resume_unwind(error))
+        .unwrap_or_else(|error| {
+            log::error!("{error}");
+            ExitCode::FAILURE
+        })
 }
 
 /// Normal execution.
@@ -100,7 +106,7 @@ pub fn main() {
 /// # Errors
 ///
 /// Any runtime error in the program.
-fn run(cli: Cli) -> Result<()> {
+fn run(cli: Cli) -> Result<ExitCode> {
     let user = cli.chown;
     let outdir = std::path::absolute(cli.outdir)?;
     let current_user = UserSpec::current_user()?;
@@ -126,10 +132,45 @@ fn run(cli: Cli) -> Result<()> {
         unreachable!("exec run0 should either replace the process or fail, ending current execution here");
     }
 
+    let mut exit_code = ExitCode::SUCCESS;
     let mut default_config = None;
     for preset in Preset::load_default_presets()? {
-        let preset = create_mock_preset(preset, &outdir, &mut default_config)?;
-        log::info!("preset = {}", preset.display());
+        if let Err(error) = preset_stats(preset, &outdir, &mut default_config) {
+            log::error!("preset_stats: {error}");
+            exit_code = ExitCode::FAILURE;
+        }
     }
-    todo!("{user}");
+    Ok(exit_code)
+}
+
+/// Measure and display preset statistics.
+fn preset_stats(preset: Preset, output_dir: &Path, default_config: &mut Option<Config>) -> Result<()> {
+    let name = preset.name.to_utf8_lossy().into_owned();
+
+    let start_time = Instant::now();
+    let preset = create_mock_preset(preset, output_dir, default_config)?;
+    log::debug!("create_mock_preset: elapsed={:?}, preset={preset:?}", start_time.elapsed());
+
+    let stats = mkinitcpio(&preset)?;
+    log_stats(&name, &stats);
+    Ok(())
+}
+
+/// Display statistics.
+fn log_stats(name: &str, stats: &Stats) {
+    log::info!("{name}: Real time: {:?}", stats.real_time());
+    log::info!(
+        "{name}: Virtual time: {:?} (usr: {:?}) (sys: {:?})",
+        stats.virtual_time(),
+        stats.user_time(),
+        stats.system_time()
+    );
+    log::info!("{name}: Maximum memory: {}", stats.max_rss().get_appropriate_unit(UnitType::Decimal));
+    log::info!("{name}: Page faults: (minor={}, major={})", stats.minor_page_faults(), stats.major_page_faults());
+    log::info!("{name}: Block operations: (input={}, output={})", stats.input_blocked(), stats.output_blocked());
+    log::info!(
+        "{name}: Context switches: (voluntary={}, involuntary={})",
+        stats.num_vol_ctx_sw(),
+        stats.num_inv_ctx_sw()
+    );
 }

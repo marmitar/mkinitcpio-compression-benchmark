@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::Result;
 
 use crate::bash::BashString;
-use crate::utils::command;
+use crate::measure::{self, Stats};
 
 mod config;
 mod preset;
@@ -115,11 +115,9 @@ fn cleanup(dir: &Path) -> Result<()> {
 /// # Errors
 ///
 /// Multiple reasons.
-pub fn mkinitcpio(preset: &Path) -> Result<()> {
+pub fn mkinitcpio(preset: &Path) -> Result<Stats> {
     log::trace!("mkinitcpio: preset={}", preset.display());
-    let output = command::command("/usr/bin/mkinitcpio", ["--preset".as_ref(), preset.as_os_str()]).output()?;
-    command::check("mkinitcpio", output, true)?;
-    Ok(())
+    measure::exec("/usr/bin/mkinitcpio", ["--preset".as_ref(), preset.as_os_str()])
 }
 
 #[cfg(test)]

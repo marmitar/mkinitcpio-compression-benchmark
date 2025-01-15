@@ -8,6 +8,7 @@ use anyhow::{Result, bail};
 use format_bytes::{format_bytes, write_bytes};
 
 use crate::utils::command;
+use crate::utils::strings::utf8_escaped;
 
 /// Run a restricted Bash shell.
 ///
@@ -34,7 +35,7 @@ pub fn rbash_at(commands: &[u8], dir: &Path) -> Result<Vec<u8>> {
         bail!("no stdin pipe provided to communicate with bash");
     };
 
-    log::trace!("rbash: commands={}", commands.escape_ascii());
+    log::trace!("rbash: commands={}", utf8_escaped(commands));
     write_bytes!(&mut stdin, b"set -o errexit\n")?;
     write_bytes!(&mut stdin, b"{}\n", commands)?;
     write_bytes!(&mut stdin, b"exit\n")?;

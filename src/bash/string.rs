@@ -16,7 +16,7 @@ use anyhow::{Context, Result};
 use format_bytes::{DisplayBytes, format_bytes};
 use tempfile::NamedTempFile;
 
-use crate::utils::strings::{escaped, repr};
+use crate::utils::strings::{utf8_escaped, utf8_lossy};
 
 use super::BashArray;
 use super::exec;
@@ -28,7 +28,7 @@ use super::exec;
 /// - Uses `$'...'` evalutation for escaped characters (e.g. `\n`).
 /// - Doesn't work nicely with `\0`
 fn escape(data: &[u8]) -> Result<Box<str>> {
-    log::trace!("escape: input={}", data.escape_ascii());
+    log::trace!("escape: input={}", utf8_lossy(data));
     let mut temp = NamedTempFile::new()?;
     temp.write_all(data)?;
     let temp = temp.into_temp_path();
@@ -85,7 +85,7 @@ impl BashString {
 
     /// See [`Self::from_raw`].
     fn from_raw_boxed(raw: Box<[u8]>) -> Result<Self> {
-        let escaped = escape(&raw).with_context(|| format!("while escaping raw bytes: {}", escaped(&raw)))?;
+        let escaped = escape(&raw).with_context(|| format!("while escaping raw bytes: \"{}\"", utf8_escaped(&raw)))?;
         Ok(Self { escaped, raw })
     }
 
@@ -143,7 +143,7 @@ impl BashString {
     #[inline]
     #[must_use]
     pub fn as_repr(&self) -> String {
-        repr(self.as_raw()).to_string()
+        format!("b\"{}\"", self.as_raw().escape_ascii())
     }
 
     /// Convert bytes to a path.
@@ -335,6 +335,7 @@ impl DerefMut for BashString {
 #[cfg(test)]
 mod conversion {
     use pretty_assertions::{assert_eq, assert_matches};
+    use proptest::prelude::*;
     use test_log::test;
 
     use super::*;
@@ -374,6 +375,18 @@ mod conversion {
         assert_eq!(string.arrayize().unwrap(), ["string", "'with", "quotes'", "and", "null", "byte"]);
         assert_eq!(string.mapfile(b' ').unwrap(), ["string", "'with", "quotes'", "and", "null", "byte"]);
         assert_eq!(string.mapfile(b'\0').unwrap(), ["string 'with quotes' and null byte"]);
+    }
+
+    proptest! {
+        #[test]
+        fn unescape_escaped_back_to_original(text in "\\PC*") {
+            let data = text.into_bytes();
+            let string = BashString::from_raw(data.clone()).unwrap();
+            let escaped = BashString::from_escaped(string.source()).unwrap();
+            prop_assert_eq!(string.source(), escaped.source());
+            prop_assert_eq!(string.as_raw(), escaped.as_raw());
+            prop_assert_eq!(escaped.as_raw(), data);
+        }
     }
 }
 

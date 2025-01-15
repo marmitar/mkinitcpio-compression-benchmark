@@ -14,7 +14,7 @@ clap = { version = "^4.5.26", features = ["derive"] }
 env_logger = "^0.11.6"
 format-bytes = "^0.3.0"
 hashbrown = "^0.15.2"
-log = "^0.4.22"
+log = "^0.4.25"
 libc = "^0.2.169"
 tempfile = "^3.15.0"
 
@@ -24,4 +24,5 @@ features = ["fs", "process", "user"]
 
 [dev-dependencies]
 pretty_assertions = { version = "^1.4.1", features = ["unstable"] }
+proptest = "^1.6.0"
 test-log = { version = "^0.2.16", features = ["unstable"] }

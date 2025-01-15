@@ -11,49 +11,91 @@ pub fn lines(bytes: &[u8]) -> impl FusedIterator<Item = &[u8]> {
         .skip_while(|line| line.trim_ascii().is_empty())
 }
 
-/// Apply Rust escaping rules for a byte string.
-pub const fn escaped(bytes: &[u8]) -> impl Debug + Display + Copy {
-    DisplayEscaped::<false> { bytes }
+/// Display a byte string as UTF-8, replacing invalid characters.
+///
+/// Similar to [`String::from_utf8_lossy`] without converting to a string first.
+#[inline]
+#[must_use]
+pub const fn utf8_lossy(bytes: &[u8]) -> impl Debug + Display + Copy {
+    Utf8Display::<true> { bytes }
 }
 
-/// Represents a byte array as Rust source, escaping non UTF-8 characters with hexadecimal (`\x`).
-pub const fn repr(bytes: &[u8]) -> impl Debug + Display + Copy {
-    DisplayEscaped::<true> { bytes }
+/// Display a byte string as UTF-8, escaping invalid characters.
+///
+/// Escape invalid bytes as hexadecimal.
+#[inline]
+#[must_use]
+pub const fn utf8_escaped(bytes: &[u8]) -> impl Debug + Display + Copy {
+    Utf8Display::<false> { bytes }
 }
 
-/// Display a byte string applying Rust escaping rules.
+/// Display a byte string converting to UTF-8 data.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
-struct DisplayEscaped<'a, const TAGGED: bool> {
+struct Utf8Display<'a, const LOSSY: bool> {
     /// Inner byte string.
     bytes: &'a [u8],
 }
 
-impl<const TAGGED: bool> Debug for DisplayEscaped<'_, TAGGED> {
+impl<const LOSSY: bool> Debug for Utf8Display<'_, LOSSY> {
     #[inline]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         Debug::fmt(&self.bytes, f)
     }
 }
 
-impl<const TAGGED: bool> Display for DisplayEscaped<'_, TAGGED> {
+impl<const LOSSY: bool> Display for Utf8Display<'_, LOSSY> {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        if TAGGED {
-            f.write_char('b')?;
+        for chunk in self.bytes.utf8_chunks() {
+            f.write_str(chunk.valid())?;
+            if LOSSY {
+                if !chunk.invalid().is_empty() {
+                    f.write_char(char::REPLACEMENT_CHARACTER)?;
+                }
+            } else {
+                for &byte in chunk.invalid() {
+                    f.write_str("\\x")?;
+                    for digit in repr_hex(byte) {
+                        f.write_char(digit.into())?;
+                    }
+                }
+            }
         }
-        f.write_char('"')?;
-        Display::fmt(&self.bytes.escape_ascii(), f)?;
-        f.write_char('"')?;
         Ok(())
     }
 }
 
+/// Represents a single byte as a hexadecimal pair.
+const fn repr_hex(byte: u8) -> [u8; 2] {
+    #[inline]
+    const fn hex(num: u8) -> u8 {
+        match num {
+            0..=9 => b'0' + num,
+            10..=16 => b'A' + (num - 10),
+            _ => panic!("number not in hexadecimal range"),
+        }
+    }
+
+    macro_rules! hex {
+        () => { hex!(0, 1, 2, 3) };
+        ($($i:literal),*) => { [$(
+            const { hex(4 * $i + 0) },
+            const { hex(4 * $i + 1) },
+            const { hex(4 * $i + 2) },
+            const { hex(4 * $i + 3) },
+        )*] };
+    }
+
+    const HEX: [u8; 16] = hex!();
+
+    #[expect(clippy::integer_division_remainder_used, reason = "optmized by the compiler")]
+    [HEX[(byte / 16) as usize], HEX[(byte % 16) as usize]]
+}
+
 #[cfg(test)]
 mod tests {
-    use std::ffi::OsStr;
-    use std::os::unix::ffi::OsStrExt;
-
-    use pretty_assertions::{assert_eq, assert_ne};
+    use pretty_assertions::assert_eq;
+    use proptest::prelude::*;
     use test_log::test;
 
     use super::*;
@@ -80,70 +122,41 @@ in the middle
         assert_eq!(next_line(&mut lines), None);
     }
 
-    fn repr_byte_str(bytes: &[u8], tagged: bool) -> String {
-        let mut out = String::with_capacity(bytes.len());
-        if tagged {
-            out.push('b');
+    #[test]
+    fn utf8_representation() {
+        let target = b"simple text";
+        assert_eq!(utf8_lossy(target).to_string(), "simple text");
+        assert_eq!(utf8_escaped(target).to_string(), "simple text");
+
+        let target = b"binary\xff\xffdata";
+        assert_eq!(utf8_lossy(target).to_string(), "binary��data");
+        assert_eq!(utf8_escaped(target).to_string(), "binary\\xFF\\xFFdata");
+
+        let target = b"text with \0 binary \xff data";
+        assert_eq!(utf8_lossy(target).to_string(), "text with \0 binary � data");
+        assert_eq!(utf8_escaped(target).to_string(), "text with \0 binary \\xFF data");
+
+        let target = b"some 'quoted string' and \"double\"";
+        assert_eq!(utf8_lossy(target).to_string(), "some 'quoted string' and \"double\"");
+        assert_eq!(utf8_escaped(target).to_string(), "some 'quoted string' and \"double\"");
+    }
+
+    proptest! {
+        #[test]
+        fn prop_matches_std_utf8_lossy(data: Vec<u8>) {
+            prop_assert_eq!(utf8_lossy(&data).to_string(), String::from_utf8_lossy(&data));
         }
-        out.push('"');
-        for chunk in bytes.utf8_chunks() {
-            write!(out, "{}", chunk.valid().escape_debug()).unwrap();
-            for byte in chunk.invalid() {
-                write!(out, "\\x{byte:x}").unwrap();
-            }
+
+        fn prop_utf8_data_is_converted_the_same(text: String) {
+            prop_assert_eq!(utf8_lossy(text.as_bytes()).to_string(), text.as_ref());
+            prop_assert_eq!(utf8_escaped(text.as_bytes()).to_string(), text.as_ref());
         }
-        out.push('"');
-        out
     }
 
     #[test]
-    fn escaped_representation() {
-        let target = b"simple text";
-        assert_eq!(repr(target).to_string(), stringify!(b"simple text"), "repr via stringify");
-        assert_eq!(repr(target).to_string(), format!("b\"{}\"", target.escape_ascii()), "repr via escape_ascii");
-        assert_eq!(repr(target).to_string(), repr_byte_str(target, true), "repr via custom implementation");
-        assert_eq!(repr(target).to_string(), format!("b{:?}", OsStr::from_bytes(target)), "repr via OsStrs");
-        assert_eq!(repr(target).to_string(), format!("b{}", escaped(target)), "repr via escape + b");
-        assert_eq!(escaped(target).to_string(), repr_byte_str(target, false), "escape via custom implementation");
-
-        let target = b"binary\xff\xffdata";
-        assert_eq!(repr(target).to_string(), stringify!(b"binary\xff\xffdata"), "repr via stringify");
-        assert_eq!(repr(target).to_string(), format!("b\"{}\"", target.escape_ascii()), "repr via escape_ascii");
-        assert_eq!(repr(target).to_string(), repr_byte_str(target, true), "repr via custom implementation");
-        assert_eq!(
-            repr(target).to_string().to_lowercase(),
-            format!("b{:?}", OsStr::from_bytes(target)).to_lowercase(),
-            "repr via OsStrs (case insensitive)"
-        );
-        assert_eq!(repr(target).to_string(), format!("b{}", escaped(target)), "repr via escape + b");
-        assert_eq!(escaped(target).to_string(), repr_byte_str(target, false), "escape via custom implementation");
-
-        let target = b"text with \0 binary \xff data";
-        assert_eq!(
-            repr(target).to_string(),
-            stringify!(b"text with \x00 binary \xff data"),
-            "repr via stringify (almost)"
-        );
-        assert_eq!(repr(target).to_string(), format!("b\"{}\"", target.escape_ascii()), "repr via escape_ascii");
-        assert_ne!(repr(target).to_string(), repr_byte_str(target, true), "repr via custom implementation (almost)");
-        assert_ne!(repr(target).to_string(), format!("b{:?}", OsStr::from_bytes(target)), "repr via OsStrs (almost)");
-        assert_eq!(repr(target).to_string(), format!("b{}", escaped(target)), "repr via escape + b");
-        assert_ne!(
-            escaped(target).to_string(),
-            repr_byte_str(target, false),
-            "escape via custom implementation (almost)"
-        );
-
-        let target = b"some 'quoted string' and \"double\"";
-        assert_eq!(
-            repr(target).to_string(),
-            stringify!(b"some \'quoted string\' and \"double\""),
-            "repr via stringify (almost)"
-        );
-        assert_eq!(repr(target).to_string(), format!("b\"{}\"", target.escape_ascii()), "repr via escape_ascii");
-        assert_eq!(repr(target).to_string(), repr_byte_str(target, true), "repr via custom implementation");
-        assert_eq!(repr(target).to_string(), format!("b{:?}", OsStr::from_bytes(target)), "repr via OsStrs (almost)");
-        assert_eq!(repr(target).to_string(), format!("b{}", escaped(target)), "repr via escape + b");
-        assert_eq!(escaped(target).to_string(), repr_byte_str(target, false), "escape via custom implementation");
+    fn repr_hex_equals_upper_hex() {
+        for byte in 0x00..=0xFF {
+            assert_eq!(std::str::from_utf8(&repr_hex(byte)).unwrap(), format!("{byte:02X}"));
+        }
     }
 }

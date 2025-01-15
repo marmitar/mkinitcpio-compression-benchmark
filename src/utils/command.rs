@@ -5,6 +5,8 @@ use std::process::{Command, Output, Stdio};
 
 use anyhow::{Result, bail};
 
+use crate::utils::strings::utf8_lossy;
+
 use super::strings;
 
 /// Shared setup for [`Command`].
@@ -47,11 +49,11 @@ pub fn check(name: &str, output: Output, show_stdout: bool) -> Result<Vec<u8>> {
         }
     }
     for line in strings::lines(&output.stderr) {
-        log::warn!("{name}: {}", line.escape_ascii());
+        log::warn!("{name}: {}", utf8_lossy(line));
     }
     if show_stdout {
         for line in strings::lines(&output.stdout) {
-            log::debug!("{name}: {}", line.escape_ascii());
+            log::debug!("{name}: {}", utf8_lossy(line));
         }
     }
     Ok(output.stdout)

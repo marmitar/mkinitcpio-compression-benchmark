@@ -64,9 +64,62 @@ use std::time::Instant;
 use anyhow::Result;
 use byte_unit::UnitType;
 use clap::Parser;
-use mkinitcpio_compression_benchmark::measure::Stats;
+use mkinitcpio_compression_benchmark::measure::{Stats, exec};
 use mkinitcpio_compression_benchmark::mkinitcpio::{Config, Preset, create_mock_preset, mkinitcpio};
 use mkinitcpio_compression_benchmark::{UserSpec, sudo};
+
+/// A compression method to be tested.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+struct Compression {
+    /// Unique method name.
+    name: &'static str,
+    /// Extension for compressed file.
+    extension: &'static str,
+    /// Compress a file.
+    compress: fn(path: &Path) -> Result<Stats>,
+    /// Decompress a file.
+    decompress: fn(path: &Path) -> Result<Stats>,
+}
+
+/// List of compression methods to test.
+const COMPRESSION: &[Compression] = &[
+    Compression {
+        name: "lz4-fast",
+        extension: ".lz4",
+        compress: |path| exec("/usr/bin/lz4", ["-v".as_ref(), "-12".as_ref(), path.as_os_str()]),
+        decompress: |path| exec("/usr/bin/lz4", ["-v".as_ref(), "-d".as_ref(), path.as_os_str()]),
+    },
+    Compression {
+        name: "lz4-norm",
+        extension: ".lz4",
+        compress: |path| exec("/usr/bin/lz4", ["-v".as_ref(), path.as_os_str()]),
+        decompress: |path| exec("/usr/bin/lz4", ["-v".as_ref(), "-d".as_ref(), path.as_os_str()]),
+    },
+    Compression {
+        name: "lz4-high",
+        extension: ".lz4",
+        compress: |path| exec("/usr/bin/lz4", ["-v".as_ref(), "--fast=12".as_ref(), path.as_os_str()]),
+        decompress: |path| exec("/usr/bin/lz4", ["-v".as_ref(), "-d".as_ref(), path.as_os_str()]),
+    },
+    Compression {
+        name: "zstd-fast",
+        extension: ".zst",
+        compress: |path| exec("/usr/bin/zstdmt", ["-v".as_ref(), "-1".as_ref(), path.as_os_str()]),
+        decompress: |path| exec("/usr/bin/zstdmt", ["-v".as_ref(), "-d".as_ref(), path.as_os_str()]),
+    },
+    Compression {
+        name: "zstd-norm",
+        extension: ".zst",
+        compress: |path| exec("/usr/bin/zstdmt", ["-v".as_ref(), "-5".as_ref(), "--long".as_ref(), path.as_os_str()]),
+        decompress: |path| exec("/usr/bin/zstdmt", ["-v".as_ref(), "-d".as_ref(), path.as_os_str()]),
+    },
+    Compression {
+        name: "zstd-high",
+        extension: ".zst",
+        compress: |path| exec("/usr/bin/zstdmt", ["-v".as_ref(), "-19".as_ref(), "--long".as_ref(), path.as_os_str()]),
+        decompress: |path| exec("/usr/bin/zstdmt", ["-v".as_ref(), "-d".as_ref(), path.as_os_str()]),
+    },
+];
 
 /// Run some benchmarks on mkinitcpio compression and decompression algorithms
 #[derive(Parser, Debug, Clone)]
@@ -148,12 +201,36 @@ fn preset_stats(preset: Preset, output_dir: &Path, default_config: &mut Option<C
     let name = preset.name.to_utf8_lossy().into_owned();
 
     let start_time = Instant::now();
-    let preset = create_mock_preset(preset, output_dir, default_config)?;
+    let (preset, image, uki) = create_mock_preset(preset, output_dir, default_config)?;
     log::debug!("create_mock_preset: elapsed={:?}, preset={preset:?}", start_time.elapsed());
 
     let stats = mkinitcpio(&preset)?;
     log_stats(&name, &stats);
+
+    for (idx, compression) in COMPRESSION.iter().enumerate() {
+        log::debug!("preset_stats: idx={idx}, compression={compression:?}");
+
+        for (tag, img) in [("img", &image), ("uki", &uki)] {
+            let target_image = with_extension(img, &format!(".{idx}"));
+            log::debug!("preset_stats: target_image={}", target_image.display());
+
+            std::fs::copy(&image, &target_image)?;
+            let stats = (compression.compress)(&target_image)?;
+            log_stats(&format!("{name}/{}/{tag}/c", compression.name), &stats);
+
+            std::fs::remove_file(&target_image)?;
+            let stats = (compression.decompress)(&with_extension(&target_image, compression.extension))?;
+            log_stats(&format!("{name}/{}/{tag}/d", compression.name), &stats);
+        }
+    }
     Ok(())
+}
+
+/// Adds string to path.
+fn with_extension(path: &Path, extension: &str) -> PathBuf {
+    let mut buf = path.as_os_str().to_owned();
+    buf.push(extension);
+    buf.into()
 }
 
 /// Display statistics.

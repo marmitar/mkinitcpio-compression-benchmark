@@ -25,7 +25,7 @@ pub fn create_mock_preset(
     mut preset: Preset,
     output_dir: &Path,
     default_config: &mut Option<Config>,
-) -> Result<PathBuf> {
+) -> Result<(PathBuf, PathBuf, PathBuf)> {
     log::trace!("create_mock_preset: preset={}, output_dir={}", preset.name, output_dir.display());
     let preset_dir = output_dir
         .join(preset.filename.as_path().with_extension(""))
@@ -50,18 +50,18 @@ pub fn create_mock_preset(
     log::trace!("create_mock_preset: config_file={}", config_file.display());
     config.save_to(&config_file)?;
 
+    let image_file = preset_dir.join("test.img");
+    let uki_file = preset_dir.join("test.efi");
     preset.config.replace(BashString::from_path(config_file)?);
-    preset
-        .image
-        .replace(BashString::from_path(preset_dir.join("test.img"))?);
-    preset.uki.replace(BashString::from_path(preset_dir.join("test.efi"))?);
+    preset.image.replace(BashString::from_path(&image_file)?);
+    preset.uki.replace(BashString::from_path(&uki_file)?);
     preset.efi_image.take();
 
     let preset_file = preset_dir.join(preset.filename.as_path()).with_extension("preset");
     log::trace!("create_mock_preset: preset_file={}", preset_file.display());
     preset.save_to(&preset_file)?;
 
-    Ok(preset_file)
+    Ok((preset_file, image_file, uki_file))
 }
 
 /// Create directory recursively, if necessary.

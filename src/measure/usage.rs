@@ -88,12 +88,18 @@ impl Stats {
         })
     }
 
+    #[cfg(test)]
+    /// Child execution status when resource usage was measured.
+    ///
+    /// Should always be [`WaitStatus::Exited`].
     #[inline]
     #[must_use]
     pub const fn wait_status(&self) -> WaitStatus {
         self.wait_status
     }
 
+    #[cfg(test)]
+    /// Process ID of the child whose resource usage was measured.
     #[inline]
     #[must_use]
     pub fn pid(&self) -> Pid {
@@ -102,12 +108,15 @@ impl Stats {
             .unwrap_or_else(|| unreachable!("PID was reasolved from wait status before"))
     }
 
+    /// Rust platform aganostic version of [`WaitStatus`].
     #[inline]
     #[must_use]
     pub const fn exit_status(&self) -> ExitStatus {
         self.exit_status
     }
 
+    #[cfg(test)]
+    /// Final code resolved by child process.
     #[inline]
     #[must_use]
     pub fn exit_code(&self) -> i32 {
@@ -177,6 +186,7 @@ impl Stats {
         kibibytes(self.usage.ru_maxrss)
     }
 
+    #[cfg(test)]
     /// Integral shared memory size. (unmaintained)
     ///
     /// An integral value expressed in kilobytes times ticks of execution, which indicates the amount of memory used by
@@ -193,6 +203,7 @@ impl Stats {
         kibibytes(self.usage.ru_ixrss)
     }
 
+    #[cfg(test)]
     /// Integral unshared data size. (unmaintained)
     ///
     /// An integral value expressed in kilobytes times ticks of execution, which is the amount of unshared memory used
@@ -209,6 +220,7 @@ impl Stats {
         kibibytes(self.usage.ru_idrss)
     }
 
+    #[cfg(test)]
     /// Integral unshared stack size. (unmaintained)
     ///
     /// An integral value expressed in kilobytes times ticks of execution, which is the amount of unshared memory used
@@ -251,6 +263,7 @@ impl Stats {
         count(self.usage.ru_majflt)
     }
 
+    #[cfg(test)]
     /// Number of swaps. (unmaintained)
     ///
     /// The number of times processes was swapped entirely out of main memory.
@@ -296,6 +309,7 @@ impl Stats {
         count(self.usage.ru_oublock)
     }
 
+    #[cfg(test)]
     /// IPC messages sent. (unmaintained)
     ///
     /// Number of IPC messages sent.
@@ -311,6 +325,7 @@ impl Stats {
         count(self.usage.ru_msgsnd)
     }
 
+    #[cfg(test)]
     /// IPC messages received. (unmaintained)
     ///
     /// Number of IPC messages received.
@@ -326,6 +341,7 @@ impl Stats {
         count(self.usage.ru_msgrcv)
     }
 
+    #[cfg(test)]
     /// Signals received. (unmaintained)
     ///
     /// Number of signals received.

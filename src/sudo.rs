@@ -1,3 +1,5 @@
+//! Elevate privileges.
+
 use std::convert::Infallible;
 use std::ffi::CString;
 

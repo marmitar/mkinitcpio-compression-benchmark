@@ -46,6 +46,7 @@ impl UserSpec {
         })
     }
 
+    #[cfg(test)]
     /// Parse a UNIX user spec.
     ///
     /// Uses the same format as [`chown(1)`](https://man.archlinux.org/man/chown.1):

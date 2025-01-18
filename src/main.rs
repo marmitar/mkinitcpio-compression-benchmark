@@ -64,9 +64,17 @@ use std::time::Instant;
 use anyhow::Result;
 use byte_unit::UnitType;
 use clap::Parser;
-use mkinitcpio_compression_benchmark::measure::{Stats, exec};
-use mkinitcpio_compression_benchmark::mkinitcpio::{Config, Preset, create_mock_preset, mkinitcpio};
-use mkinitcpio_compression_benchmark::{UserSpec, sudo};
+
+mod bash;
+mod measure;
+mod mkinitcpio;
+mod sudo;
+mod user_spec;
+mod utils;
+
+use crate::measure::{Stats, exec};
+use crate::mkinitcpio::{Config, Preset, create_mock_preset, mkinitcpio};
+use crate::user_spec::UserSpec;
 
 /// A compression method to be tested.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

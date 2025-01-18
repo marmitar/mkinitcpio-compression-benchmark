@@ -10,7 +10,7 @@ use std::io::{self, Write};
 use std::ops::{Deref, DerefMut};
 use std::os::unix::ffi::OsStrExt;
 use std::path::Path;
-use std::str::{FromStr, Utf8Error};
+use std::str::FromStr;
 
 use anyhow::{Context, Result};
 use format_bytes::{DisplayBytes, format_bytes};
@@ -123,22 +123,13 @@ impl BashString {
         &self.raw
     }
 
-    /// Unquoted string as UTF-8.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Err`] if the raw string is not UTF-8 data.
-    #[inline]
-    pub const fn as_utf8(&self) -> Result<&str, Utf8Error> {
-        std::str::from_utf8(self.as_raw())
-    }
-
     /// Unquoted string as UTF-8, replacing invalid characters.
     #[must_use]
     pub fn to_utf8_lossy(&self) -> Cow<'_, str> {
         String::from_utf8_lossy(self.as_raw())
     }
 
+    #[cfg(test)]
     /// Unquoted string as valid Rust source.
     #[inline]
     #[must_use]
@@ -405,7 +396,6 @@ mod basic_impl {
         assert_eq!(string, string.reescape().unwrap());
 
         let string = BashString::from_escaped("'Simple string!'").unwrap();
-        assert_eq!(string.as_utf8(), Ok("Simple string!"));
         assert_eq!(string.to_utf8_lossy(), "Simple string!");
         assert_eq!(string, "Simple string!");
         assert_eq!(string, string.reescape().unwrap());

@@ -76,6 +76,7 @@ impl BashArray {
         &self.source
     }
 
+    #[cfg(test)]
     /// Converts the array to a Bash string.
     ///
     /// Equivalent to `$ARRAY`, so usually only the first element is converted.
@@ -124,13 +125,6 @@ impl BashArray {
     #[must_use]
     pub fn entries(&self) -> impl DoubleEndedIterator<Item = (i32, &BashString)> + ExactSizeIterator + FusedIterator {
         self.content.iter().map(|(key, val)| (*key, val))
-    }
-
-    /// Iterator of the indexes of the array.
-    #[inline]
-    #[must_use]
-    pub fn keys(&self) -> impl DoubleEndedIterator<Item = i32> + ExactSizeIterator + FusedIterator {
-        self.entries().map(|(key, _)| key)
     }
 
     /// Iterator of the string values in the array.

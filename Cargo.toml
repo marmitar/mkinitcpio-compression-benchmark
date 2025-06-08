@@ -5,6 +5,7 @@ edition = "2024"
 description = "Run some benchmarks on mkinitcpio compression and decompression algorithms"
 keywords = ["mkinitcpio", "benchmark", "compression", "linux"]
 readme = "README.md"
+license = "AGPL-3.0-or-later"
 publish = false
 
 [dependencies]
